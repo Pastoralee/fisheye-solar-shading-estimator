@@ -6,7 +6,7 @@ opencv-python
 lightgbm
 segmentation-models-pytorch
 astropy
-pvlib-python
+pvlib
 matplotlib
 openpyxl
 tqdm
