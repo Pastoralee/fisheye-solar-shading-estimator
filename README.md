@@ -6,7 +6,7 @@ A comprehensive solar estimation system that uses fisheye camera images to calcu
 
 This project was developed as part of academic research detailed in the thesis:
 
-**"[Thesis Title]"** - Available at: https://theses.hal.science/tel-04725060v1
+**"[Photovoltaic applications in demanding situations : estimation and optimisation of solar ressources for autonomous power supplies]"** - Available at: https://theses.hal.science/tel-04725060v1
 
 The sky segmentation methodology used in this work is the subject of an upcoming research paper that will be published soon.
 
