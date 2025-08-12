@@ -1,0 +1,16 @@
+numpy
+pandas
+scipy
+torch
+opencv-python
+lightgbm
+segmentation-models-pytorch
+astropy
+pvlib-python
+matplotlib
+openpyxl
+tqdm
+colorama
+requests
+PyYAML
+autograd
