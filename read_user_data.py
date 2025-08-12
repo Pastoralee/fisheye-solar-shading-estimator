@@ -265,6 +265,12 @@ def read_consumption_profile() -> Tuple[pd.DataFrame, ProcessingStage, DataSourc
     """
     print(f"{Fore.YELLOW}Checking consumption profiles...{Style.RESET_ALL}")
 
+    # Create SystemData directory if it doesn't exist
+    system_data_dir = "./SystemData"
+    if not os.path.exists(system_data_dir):
+        os.makedirs(system_data_dir, exist_ok=True)
+        print(f"{Fore.GREEN}Created directory: {system_data_dir}{Style.RESET_ALL}")
+
     data_source = DataSourceInfo()
     hourly_profile_exists = os.path.exists('./SystemData/Consumption_Profile.xlsx')
     daynight_profile_exists = os.path.exists('./SystemData/Day_Night_Profile.xlsx')
@@ -560,6 +566,12 @@ def process_sky_images() -> Tuple[np.ndarray, int, int, bool, str, List[str]]:
     """
     print(f"{Fore.YELLOW}Processing sky images...{Style.RESET_ALL}")
 
+    # Create SkyImageOfSite directory if it doesn't exist
+    sky_image_dir = "./SkyImageOfSite"
+    if not os.path.exists(sky_image_dir):
+        os.makedirs(sky_image_dir, exist_ok=True)
+        print(f"{Fore.GREEN}Created directory: {sky_image_dir}{Style.RESET_ALL}")
+
     while True:
         images = [f for f in glob("./SkyImageOfSite/*")
                   if os.path.splitext(f)[1].lower() in {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}]
@@ -644,12 +656,18 @@ def validate_calibration_images(im_height: int, im_width: int, user_data: pd.Dat
         ValueError: If calibration parameters are invalid
         FileNotFoundError: If calibration images are missing
     """
+    # Create CalibrationImages directory if it doesn't exist
+    calib_dir = "./CalibrationImages"
+    if not os.path.exists(calib_dir):
+        os.makedirs(calib_dir, exist_ok=True)
+        print(f"{Fore.GREEN}Created directory: {calib_dir}{Style.RESET_ALL}")
+    
     while True:
         calib_files = glob('./CalibrationImages/*.jpg')
 
         # Validate minimum number of calibration images
         if len(calib_files) < 8:
-            input(f"{Fore.RED}Insufficient calibration images: {len(calib_files)} found, minimum 8 required{Style.RESET_ALL}"
+            input(f"{Fore.RED}Insufficient calibration images: {len(calib_files)} found, minimum 8 required"
                   f"\nAdd more images and press Enter to continue...{Style.RESET_ALL}")
             continue
 

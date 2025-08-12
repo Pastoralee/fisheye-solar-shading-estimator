@@ -1364,6 +1364,7 @@ def execute_shading_step(stage: ProcessingStage, user_data: pd.DataFrame, irradi
     if stage <= ProcessingStage.SHADING:
         print(f"\n{Fore.CYAN}=== Step 3: Calculate Shading ==={Style.RESET_ALL}")
         try:
+            print(f"{Fore.YELLOW}Processing sky images and calculating shading factors...{Style.RESET_ALL}")
             direct_shading, diffuse_shading = process_shading(
                 user_data=user_data,
                 irradiance=irradiance_data,
@@ -1374,14 +1375,23 @@ def execute_shading_step(stage: ProcessingStage, user_data: pd.DataFrame, irradi
                 data_source=data_source
             )
 
-            # Calculate and save shading-compensated irradiance immediately
-            print(f"{Fore.YELLOW}Calculating shading-compensated irradiance...{Style.RESET_ALL}")
+            # Calculate and save shading-compensated irradiance immediately after successful shading calculation
+            print(f"{Fore.YELLOW}Applying shading factors and saving compensated irradiance...{Style.RESET_ALL}")
             final_irradiance = compute_compensated_irradiance(
                 irradiance=irradiance_data,
-                shading=(direct_shading, diffuse_shading)
+                shading=(direct_shading, diffuse_shading),
+                save_path='./DebugData/irradiance.csv'
             )
+            
+            # Verify the file was actually saved
+            if not os.path.exists('./DebugData/irradiance.csv'):
+                print(f"{Fore.RED}Warning: Failed to save irradiance.csv file{Style.RESET_ALL}")
+            else:
+                print(f"{Fore.GREEN}Irradiance file successfully saved to ./DebugData/irradiance.csv{Style.RESET_ALL}")
+            
             return final_irradiance, stage
         except Exception as e:
+            print(f"{Fore.RED}Error during shading calculation: {str(e)}{Style.RESET_ALL}")
             handle_shading_error(e)
             raise
     elif stage == ProcessingStage.STATE_OF_CHARGE:
@@ -1389,10 +1399,13 @@ def execute_shading_step(stage: ProcessingStage, user_data: pd.DataFrame, irradi
         print(f"\n{Fore.CYAN}=== Skipping Step 3: Attempting to load previous shading results ==={Style.RESET_ALL}")
         try:
             final_irradiance = load_compensated_irradiance()
+            print(f"{Fore.GREEN}Successfully loaded previous shading results{Style.RESET_ALL}")
             return final_irradiance, stage
         except (FileNotFoundError, ValueError) as e:
+            print(f"{Fore.RED}Cannot load previous shading results: {str(e)}")
+            print(f"Forcing shading recalculation...{Style.RESET_ALL}")
             new_stage = handle_shading_results_error(e)
-            return None, new_stage  # Signal to restart
+            return None, new_stage  # Signal to restart with shading stage
 
     return None, stage
 

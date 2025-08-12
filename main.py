@@ -46,19 +46,29 @@ def main():
     initialize_error_logging()
     show_welcome_message()
 
+    # Initialize variables to persist across loop iterations
+    user_data, calib_files, im_height, im_width, flag_combination, img, data_source = None, None, None, None, None, None, None
+    forced_stage = None  # Track if we're forcing a specific stage
+
     while True:
         try:
-            # Load and validate all user data
-            try:
-                user_data, calib_files, stage, im_height, im_width, flag_combination, img, data_source = read_user_data()
-            except Exception as e:
-                handle_data_loading_error(e)
-                raise
+            # Load and validate all user data (only if not forcing a stage)
+            if forced_stage is None:
+                try:
+                    user_data, calib_files, stage, im_height, im_width, flag_combination, img, data_source = read_user_data()
+                except Exception as e:
+                    handle_data_loading_error(e)
+                    raise
+            else:
+                # Use the forced stage and keep existing user data
+                stage = forced_stage
+                forced_stage = None  # Reset after using it
 
             input(f"{Fore.CYAN}Press Enter to begin estimation...{Style.RESET_ALL}")
 
-            # Check if user wants to redo calculations
-            stage = handle_user_reset(stage)
+            # Check if user wants to redo calculations (only if not using forced stage)
+            if forced_stage is None:
+                stage = handle_user_reset(stage)
             
             # Step 1: Camera Calibration
             execute_calibration_step(stage, user_data, calib_files)
@@ -74,8 +84,8 @@ def main():
                 
                 # Check if we need to restart due to irradiance loading failure
                 if irradiance_data is None:
-                    stage = ProcessingStage.RAW_IRRADIANCE
-                    continue  # Restart the main loop
+                    forced_stage = ProcessingStage.RAW_IRRADIANCE
+                    continue  # Restart the main loop with forced stage
 
                 # Step 3: Calculate Shading Factors
                 final_irradiance, stage = execute_shading_step(
@@ -84,8 +94,8 @@ def main():
                 
                 # Check if we need to restart due to shading loading failure
                 if final_irradiance is None:
-                    stage = ProcessingStage.SHADING
-                    continue  # Restart the main loop
+                    forced_stage = ProcessingStage.SHADING
+                    continue  # Restart the main loop with forced stage
 
                 # Step 4: Calculate State of Charge
                 execute_soc_step(stage, user_data, final_irradiance, irradiance_data.time_index, data_source)

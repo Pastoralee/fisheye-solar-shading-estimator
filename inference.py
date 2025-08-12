@@ -7,8 +7,82 @@ import torch
 import lightgbm as lgb
 from scipy.ndimage import uniform_filter, generic_filter
 import segmentation_models_pytorch as smp
+from colorama import Fore, Style
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 from import_camera_intrinsic_function import import_camera_intrinsic_function
+
+
+def check_model_availability(
+    pathModel: str,
+    model_name: str = 'efficientnet-b5',
+    use_lgbm: bool = False
+) -> bool:
+    """
+    Check if required machine learning model files are available.
+
+    Args:
+        pathModel (str): Directory containing model checkpoints
+        model_name (str): EfficientNet backbone version
+        use_lgbm (bool): Whether LightGBM refinement model is needed
+
+    Returns:
+        bool: True if all required models are available, False otherwise
+    """
+    # Check if model directory exists
+    if not os.path.exists(pathModel):
+        print(f"{Fore.RED}Model directory not found: {pathModel}{Style.RESET_ALL}")
+        return False
+
+    # Check for main model checkpoint
+    checkpoint_path = os.path.join(pathModel, f'{model_name}.pt')
+    if not os.path.isfile(checkpoint_path):
+        print(f"{Fore.RED}Main model checkpoint not found: {checkpoint_path}{Style.RESET_ALL}")
+        return False
+
+    # Check for LightGBM model if required
+    if use_lgbm:
+        lgbm_name = f"meta_model_{model_name.split('-')[-1]}.txt"
+        lgbm_model_path = os.path.join(pathModel, lgbm_name)
+        if not os.path.isfile(lgbm_model_path):
+            print(f"{Fore.RED}LightGBM model not found: {lgbm_model_path}{Style.RESET_ALL}")
+            return False
+
+    return True
+
+
+def wait_for_models(
+    pathModel: str = "./SystemData",
+    model_name: str = 'efficientnet-b5',
+    use_lgbm: bool = False
+) -> None:
+    """
+    Wait for user to add missing machine learning models.
+
+    This function checks for model availability and prompts the user to add
+    missing model files if they are not found.
+
+    Args:
+        pathModel (str): Directory where models should be located
+        model_name (str): EfficientNet backbone version
+        use_lgbm (bool): Whether LightGBM refinement model is needed
+    """
+    while not check_model_availability(pathModel, model_name, use_lgbm):
+        print(f"\n{Fore.RED}Missing machine learning model files!{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}Required files in {pathModel}:{Style.RESET_ALL}")
+        print(f"- {model_name}.pt (main segmentation model)")
+        if use_lgbm:
+            lgbm_name = f"meta_model_{model_name.split('-')[-1]}.txt"
+            print(f"- {lgbm_name} (LightGBM refinement model)")
+        
+        print(f"\n{Fore.CYAN}To obtain these models:{Style.RESET_ALL}")
+        print("1. Download from: https://drive.google.com/drive/folders/1PnKakX55PCW72MTsl-TXBb6TM5EOUejA")
+        print("2. Navigate to the 'Models' folder")
+        print("3. Download the required model files")
+        print(f"4. Place them in the {pathModel} directory")
+        
+        input(f"\n{Fore.CYAN}Add the missing model files and press Enter to continue...{Style.RESET_ALL}")
+
+    print(f"{Fore.GREEN}All required model files found!{Style.RESET_ALL}")
 
 
 def estimate_radius(pprad_path: str) -> None:
@@ -273,6 +347,8 @@ def model_inference(
     Returns:
         Optional[np.ndarray]: Binary sky mask (1 for sky), or None if error occurs
     """
+    # Check if models are available, wait for user to add them if not
+    wait_for_models(pathModel, model_name, use_lgbm)
 
     threshold_dict = {
         'efficientnet-b5': 176 / 255,
@@ -280,14 +356,9 @@ def model_inference(
     }
     threshold = threshold_dict.get(model_name, 0.5)
 
-    if not os.path.exists(pathModel):
-        raise FileNotFoundError(f"Model folder not found at {pathModel}")
-
     checkpoint_path = os.path.join(pathModel, f'{model_name}.pt')
-    if not os.path.isfile(checkpoint_path):
-        raise FileNotFoundError(f"Checkpoint file '{model_name}.pt' not found in {pathModel}")
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     try:
         checkpoint = torch.load(checkpoint_path, map_location=device)
     except Exception as e:
@@ -306,8 +377,6 @@ def model_inference(
     if use_lgbm:
         lgbm_name = f"meta_model_{model_name.split('-')[-1]}.txt"
         lgbm_model_path = os.path.join(pathModel, lgbm_name)
-        if not os.path.isfile(lgbm_model_path):
-            raise FileNotFoundError(f"LGBM model file '{lgbm_name}' not found in {pathModel}")
         try:
             model_lgbm = lgb.Booster(model_file=lgbm_model_path)
         except Exception as e:

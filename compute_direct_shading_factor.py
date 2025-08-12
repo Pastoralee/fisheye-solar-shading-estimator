@@ -170,8 +170,8 @@ def compute_sun_disk_radius_pixels(
         az = np.degrees(np.arctan2(v[0], v[1])) % 360
         disk_az_ze.append([az, ze])
 
-    print(f"disk_vectors: {disk_vectors}")
-    print(f"disk_az_ze: {disk_az_ze}")
+    # print(f"disk_vectors: {disk_vectors}")
+    # print(f"disk_az_ze: {disk_az_ze}")
 
     # Convert disk points to image coordinates
     disk_cam_coords = [
@@ -192,9 +192,9 @@ def compute_sun_disk_radius_pixels(
     radii = [np.linalg.norm(pt - sun_center_img) for pt in disk_img_coords]
     radii = np.array(radii)
 
-    print(f"disk_img_coords: {disk_img_coords}")
-    print(f"sun_center_img: {sun_center_img}")
-    print(f"radii: {radii}")
+    # print(f"disk_img_coords: {disk_img_coords}")
+    # print(f"sun_center_img: {sun_center_img}")
+    # print(f"radii: {radii}")
 
     # Use median + MAD (median absolute deviation)
     median = np.median(radii)
@@ -343,24 +343,24 @@ def compute_direct_shading_factor_generic(
         pt2 = tuple(map(int, image_coords[i]))
 
         # Calculate sun disk radius
-        radius_px = round(compute_sun_disk_radius(
-            az_array[i],
-            zen_array[i],
-            image_orientation,
-            image_inclination,
-            principal_point,
-            poly_incident_angle_to_radius,
-            include_circumsolar=True
-        ))
-
-        # radius_px = round(compute_sun_disk_radius_pixels(
+        # radius_px = round(compute_sun_disk_radius(
         #     az_array[i],
         #     zen_array[i],
         #     image_orientation,
         #     image_inclination,
-        #     poly_incident_angle_to_radius,
         #     principal_point,
+        #     poly_incident_angle_to_radius,
+        #     include_circumsolar=True
         # ))
+
+        radius_px = round(compute_sun_disk_radius_pixels(
+            az_array[i],
+            zen_array[i],
+            image_orientation,
+            image_inclination,
+            poly_incident_angle_to_radius,
+            principal_point,
+        ))
 
         # Draw sun path and disk
         path_thickness = radius_px * 2
