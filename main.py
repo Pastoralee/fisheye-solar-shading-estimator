@@ -10,6 +10,7 @@ Usage:
     python main.py
 """
 
+from colorama import Fore, Style
 from core import (
     ProcessingStage,
     initialize_error_logging,
@@ -25,7 +26,6 @@ from core import (
     handle_data_loading_error,
     read_user_data
 )
-from colorama import Fore, Style
 
 
 def main():
@@ -45,9 +45,6 @@ def main():
     """
     initialize_error_logging()
     show_welcome_message()
-
-    # Initialize variables to persist across loop iterations
-    user_data, calib_files, im_height, im_width, flag_combination, img, data_source = None, None, None, None, None, None, None
     forced_stage = None  # Track if we're forcing a specific stage
 
     while True:
@@ -55,9 +52,10 @@ def main():
             # Load and validate all user data (only if not forcing a stage)
             if forced_stage is None:
                 try:
-                    user_data, calib_files, stage, im_height, im_width, flag_combination, img, data_source = read_user_data()
-                except Exception as e:
-                    handle_data_loading_error(e)
+                    (user_data, calib_files, stage, im_height, im_width,
+                     flag_combination, img, data_source) = read_user_data()
+                except Exception as err:
+                    handle_data_loading_error(err)
                     raise
             else:
                 # Use the forced stage and keep existing user data
@@ -81,7 +79,7 @@ def main():
                 irradiance_data, stage = execute_irradiance_step(
                     stage, user_data, solar_coords, time_array, start_dt, end_dt, data_source
                 )
-                
+
                 # Check if we need to restart due to irradiance loading failure
                 if irradiance_data is None:
                     forced_stage = ProcessingStage.RAW_IRRADIANCE
@@ -91,14 +89,17 @@ def main():
                 final_irradiance, stage = execute_shading_step(
                     stage, user_data, irradiance_data, im_height, im_width, flag_combination, img, data_source
                 )
-                
+
                 # Check if we need to restart due to shading loading failure
                 if final_irradiance is None:
                     forced_stage = ProcessingStage.SHADING
                     continue  # Restart the main loop with forced stage
 
                 # Step 4: Calculate State of Charge
-                execute_soc_step(stage, user_data, final_irradiance, irradiance_data.time_index, data_source)
+                execute_soc_step(
+                    stage, user_data, final_irradiance,
+                    irradiance_data.time_index, data_source
+                )
 
             print(f"\n{Fore.GREEN}All calculations completed successfully!{Style.RESET_ALL}")
 
@@ -109,7 +110,8 @@ def main():
         except KeyboardInterrupt:
             print(f"\n{Fore.RED}Program interrupted by user.{Style.RESET_ALL}")
             return
-        except Exception as e:
+        except Exception:
+            # Log the error if needed, but do not use unused variable
             if not get_user_recovery_choice():
                 return
             continue
