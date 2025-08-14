@@ -1,9 +1,15 @@
 import logging
 from typing import Tuple
+import sys
+import os
 
 import torch
 from torch import Tensor
 from tqdm import tqdm
+
+# Add parent directory to sys.path to import config
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from config import PATHS
 
 from . import optim
 from .extrinsics import full_extrinsics, partial_extrinsics
@@ -48,7 +54,11 @@ def show_points(title: str, figure_path: str, image_points: Tensor,
         scatter.imshow(images, image_shape)
     scatter(image_points, color='g', marker='o')
     scatter(projected_points, color='r', marker='x')
-    scatter.save(f'./DebugData/{figure_path}.pdf', dpi=300)
+    
+    # Ensure DebugData directory exists
+    os.makedirs(PATHS["debug_data"], exist_ok=True)
+    
+    scatter.save(os.path.join(PATHS["debug_data"], f'{figure_path}.pdf'), dpi=300)
     scatter.show()
 
 

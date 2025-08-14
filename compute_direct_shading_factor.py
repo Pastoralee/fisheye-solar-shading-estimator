@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 import cv2
 from colorama import Fore, Style
+from config import PATHS
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 from astropy_to_camera_extrinsic import astropy_to_camera_extrinsic
 
@@ -378,7 +379,9 @@ def compute_direct_shading_factor_generic(
             complementary_direct_shading_factor[idx] = visible_pixels / total_pixels
 
     # Save visualization
-    debug_path = './DebugData/sun_trajectory.jpg'
+    import os
+    debug_path = os.path.join(PATHS["debug_data"], 'sun_trajectory.jpg')
+    os.makedirs(os.path.dirname(debug_path), exist_ok=True)
     cv2.imwrite(debug_path, trajectory_image)
     print(f"{Fore.GREEN}Saved trajectory visualization to {debug_path}{Style.RESET_ALL}")
 

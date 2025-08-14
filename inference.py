@@ -8,6 +8,7 @@ import lightgbm as lgb
 from scipy.ndimage import uniform_filter, generic_filter
 import segmentation_models_pytorch as smp
 from colorama import Fore, Style
+from config import PATHS
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 from import_camera_intrinsic_function import import_camera_intrinsic_function
 
@@ -51,7 +52,7 @@ def check_model_availability(
 
 
 def wait_for_models(
-    pathModel: str = "./SystemData",
+    pathModel: str = None,
     model_name: str = 'efficientnet-b5',
     use_lgbm: bool = False
 ) -> None:
@@ -62,10 +63,13 @@ def wait_for_models(
     missing model files if they are not found.
 
     Args:
-        pathModel (str): Directory where models should be located
+        pathModel (str): Directory where models should be located (defaults to system_data path)
         model_name (str): EfficientNet backbone version
         use_lgbm (bool): Whether LightGBM refinement model is needed
     """
+    if pathModel is None:
+        pathModel = PATHS["system_data"]
+        
     while not check_model_availability(pathModel, model_name, use_lgbm):
         print(f"\n{Fore.RED}Missing machine learning model files!{Style.RESET_ALL}")
         print(f"{Fore.CYAN}Required files in {pathModel}:{Style.RESET_ALL}")
@@ -440,7 +444,8 @@ def inference(
     Note:
         Requires camera calibration data to be available and model weights in SystemData folder
     """
-    data_dir = "./DebugData"
+    data_dir = PATHS["debug_data"]
+    os.makedirs(data_dir, exist_ok=True)
     pprad_path = os.path.join(data_dir, "pprad.yml")
     estimate_radius(pprad_path)
     img_cropped, cropped_section = crop_around_disk(pprad_path, img)
@@ -451,7 +456,7 @@ def inference(
             img_cropped, cv2.COLOR_BGR2RGB))
     prediction = model_inference(
         img_cropped,
-        "./SystemData",
+        PATHS["system_data"],
         model_name=model_name,
         use_lgbm=use_lgbm,
         resize_target=resize_target)
@@ -466,8 +471,8 @@ def inference(
 
 
 def batch_disk_mask_inference(
-    folder_path: str = "./SkyImageOfSite/",
-    model_path: str = "./SystemData",
+    folder_path: str = None,
+    model_path: str = None,
     model_name: str = 'efficientnet-b5',
     use_lgbm: bool = False,
     resize_target: Tuple[int, int] = (1024, 1024)
@@ -480,8 +485,8 @@ def batch_disk_mask_inference(
     that are consistently classified as sky across all images.
 
     Args:
-        folder_path (str): Path to folder containing input images.
-        model_path (str): Path to folder containing model checkpoints.
+        folder_path (str): Path to folder containing input images (defaults to sky_images path).
+        model_path (str): Path to folder containing model checkpoints (defaults to system_data path).
         model_name (str): Name of the model architecture to use.
         use_lgbm (bool): Whether to use LightGBM for post-processing.
         resize_target (Tuple[int, int]): Target size for image resizing.
@@ -489,8 +494,14 @@ def batch_disk_mask_inference(
     Returns:
         np.ndarray: Combined binary mask.
     """
+    # Use default paths from config if not provided
+    if folder_path is None:
+        folder_path = PATHS["sky_images"]
+    if model_path is None:
+        model_path = PATHS["system_data"]
     import glob
-    data_dir = "./DebugData"
+    data_dir = PATHS["debug_data"]
+    os.makedirs(data_dir, exist_ok=True)
     pprad_path = os.path.join(data_dir, "pprad.yml")
     estimate_radius(pprad_path)
 

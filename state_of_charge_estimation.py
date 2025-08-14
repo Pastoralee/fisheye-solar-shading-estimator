@@ -1,4 +1,5 @@
 from typing import Tuple, Dict
+import os
 import pandas as pd
 import numpy as np
 from colorama import Fore, Style
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from astropy.time import Time
 from astropy.coordinates import EarthLocation, AltAz, get_sun
+from config import PATHS
 
 
 def save_debug_data(debug_data: pd.DataFrame, filename: str) -> None:
@@ -14,14 +16,16 @@ def save_debug_data(debug_data: pd.DataFrame, filename: str) -> None:
     
     Args:
         debug_data: DataFrame containing debug data to save
-        filename: Name of the Excel file to save (will be saved in ./DebugData/)
+        filename: Name of the Excel file to save (will be saved in debug_data folder)
         
     Note:
         Prompts user to close file if it's locked and retries automatically
     """
     while True:
         try:
-            debug_data.to_excel(f'./DebugData/{filename}')
+            import os
+            os.makedirs(PATHS["debug_data"], exist_ok=True)
+            debug_data.to_excel(os.path.join(PATHS["debug_data"], filename))
             break
         except PermissionError:
             input(
@@ -160,6 +164,9 @@ def calculate_soc_evolution(
     Note:
         SOC is clamped to the min/max limits and accounts for charge/discharge efficiencies
     """
+    # Convert to numpy array if it's a pandas Series to avoid FutureWarning
+    energy_flow = np.asarray(energy_flow)
+    
     soc_evolution = np.zeros(len(energy_flow))
     soc_evolution[0] = initial_soc
 
@@ -219,7 +226,7 @@ def state_of_charge_estimation(
     print(f'{Fore.YELLOW}Computing the estimated evolution of the system state of charge...{Style.RESET_ALL}')
 
     # Load and process consumption profile
-    raw_consumption = pd.read_excel('./SystemData/Consumption_Profile.xlsx', index_col=None)
+    raw_consumption = pd.read_excel(PATHS["consumption_profile"], index_col=None)
     consumption_over_time = np.zeros(len(time_array))
 
     for _, row in raw_consumption.iterrows():
@@ -256,7 +263,7 @@ def state_of_charge_estimation(
         time_array,
         final_irradiance,
         soc_evolution,
-        './DebugData/hourly_soc_estimation_from_user_visual.png'
+        os.path.join(PATHS["debug_data"], 'hourly_soc_estimation_from_user_visual.png')
     )
 
     # Save system operation verdict
@@ -384,12 +391,12 @@ def state_of_charge_estimation_day_night(
     print(f'{Fore.YELLOW}Computing the estimated evolution of the system state of charge '
           f'(day/night profile, astropy sunrise/sunset)...{Style.RESET_ALL}')
     # Load location data
-    user_data = pd.read_excel('./SystemData/System_Specifications.xlsx', index_col=None)
+    user_data = pd.read_excel(PATHS["system_specs"], index_col=None)
     lat = float(user_data['Lattitude (°)'][0])
     lon = float(user_data['Longitude (°)'][0])
 
     # Load consumption profiles
-    profile = pd.read_excel('./SystemData/Day_Night_Profile.xlsx', index_col=None)
+    profile = pd.read_excel(PATHS["day_night_profile"], index_col=None)
     day_consumption = profile['Day Consumption (Wh)'][0]
     night_consumption = profile['Night Consumption (Wh)'][0]
 
@@ -439,7 +446,7 @@ def state_of_charge_estimation_day_night(
         time_array,
         final_irradiance,
         soc_evolution,
-        './DebugData/hourly_soc_estimation_day_night.png'
+        os.path.join(PATHS["debug_data"], 'hourly_soc_estimation_day_night.png')
     )
 
     # Save system operation verdict

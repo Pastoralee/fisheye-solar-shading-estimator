@@ -7,6 +7,7 @@ from numpy import tan
 import yaml
 from scipy.optimize import minimize
 from colorama import Fore, Style
+from config import PATHS
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 
 
@@ -27,7 +28,7 @@ def create_image(
         principal_point: Image center coordinates [x, y]
     """
     # Find available images
-    folder = "./SkyImageOfSite"
+    folder = PATHS['sky_images']
     valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
     images = [
         f for f in glob(os.path.join(folder, "*"))
@@ -100,87 +101,13 @@ def create_image(
         image = add_fov_text(image, str(fov_angle), pos)
 
     # Save and display results
-    output_path = './DebugData/fov_test.jpg'
+    output_path = os.path.join(PATHS["debug_data"], 'fov_test.jpg')
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     cv2.imwrite(output_path, image)
 
     print(f"{Fore.GREEN}Estimated FOV is {fov_angle}°{Style.RESET_ALL}")
     print(f"{Fore.LIGHTCYAN_EX}Please verify that the FOV circle aligns with your fisheye view border!")
     print(f"The image has been saved to: {output_path}{Style.RESET_ALL}")
-
-
-def create_fov_debug_image(
-    poly_incident_angle_to_radius: List[float],
-    principal_point: List[float]
-) -> None:
-    """
-    Create a debug image showing multiple FOV circles at different angles.
-
-    Args:
-        poly_incident_angle_to_radius: Polynomial coefficients for angle to radius mapping
-        principal_point: Image center coordinates [x, y]
-    """
-    image = cv2.imread("./temp/test.jpg")
-    if image is None:
-        print(f"{Fore.RED}Failed to load test image{Style.RESET_ALL}")
-        return
-
-    def draw_fov_circle(
-        img: np.ndarray,
-        fov_angle: float,
-        color: Tuple[int, int, int]
-    ) -> np.ndarray:
-        """Draw a single FOV circle with its angle label."""
-        theta = np.deg2rad([fov_angle])
-        x_prime = tan(theta)
-        fov_limit = camera_coords_to_image_intrinsic(
-            np.column_stack((x_prime, [0])),
-            poly_incident_angle_to_radius,
-            principal_point
-        )
-        distance = fov_limit[0][0] - principal_point[0]
-        center = (round(principal_point[0]), round(principal_point[1]))
-
-        # Draw circle
-        img = cv2.circle(img, center, round(distance), color, 2)
-        # Add label
-        img = cv2.putText(
-            img,
-            str(fov_angle),
-            (round(principal_point[0] + distance), round(principal_point[1])),
-            cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2, cv2.LINE_AA
-        )
-        return img
-
-    # Define FOV angles and their corresponding colors
-    fov_configs = [
-        (90, (0, 0, 255)),   # Red
-        (80, (0, 255, 0)),   # Green
-        (70, (255, 0, 0)),   # Blue
-        (60, (0, 0, 255)),   # Red
-        (50, (0, 255, 0)),   # Green
-        (40, (255, 0, 0)),   # Blue
-        (30, (0, 0, 255)),   # Red
-        (20, (0, 255, 0)),   # Green
-        (10, (255, 0, 0))    # Blue
-    ]
-
-    # Draw circles for each FOV angle
-    for angle, color in fov_configs:
-        image = draw_fov_circle(image, angle, color)
-
-    # Save the result
-    output_path = './temp/test_fov.jpg'
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    cv2.imwrite(output_path, image)
-
-    print(f"{Fore.GREEN}Debug FOV image saved to {output_path}{Style.RESET_ALL}")
-    print(f"{Fore.LIGHTCYAN_EX}Multiple FOV circles drawn at 10° intervals for comparison{Style.RESET_ALL}")
-
-    # Display the image
-    cv2.imshow('FOV Debug View', image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
 
 def estimate_fov_optimized(

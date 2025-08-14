@@ -6,6 +6,7 @@ import astropy.coordinates as coord
 from astropy.time import Time
 import astropy.units as u
 from colorama import Fore, Style
+from config import PATHS
 
 
 def sunpath_from_astropy(
@@ -71,7 +72,7 @@ def sunpath_from_astropy(
         })
 
         # Save to debug directory
-        output_path = './DebugData/solar_coords.csv'
+        output_path = os.path.join(PATHS["debug_data"], 'solar_coords.csv')
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         debug_data.set_index('Timeseries').to_csv(output_path)
 
