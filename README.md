@@ -91,7 +91,7 @@ The program will guide you through:
 │   ├── System_Specifications.xlsx
 │   └── [ML model files]       # Download from Google Drive
 ├── omnicalib/                 # Camera calibration library
-├── README.docx               # Detailed usage instructions
+├── README.pdf               # Detailed usage instructions
 └── *.py                       # Main program files
 ```
 

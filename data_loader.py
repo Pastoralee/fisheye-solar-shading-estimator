@@ -384,6 +384,9 @@ def load_custom_irradiance_data(
             print(f"{Fore.RED}No valid datetime data found{Style.RESET_ALL}")
             return None, None, None, None
 
+        # Resample to hourly data for consistent analysis
+        df = df.resample('H').mean()
+
         # Get remaining columns (excluding datetime)
         remaining_cols = [col for col in df.columns]
 
