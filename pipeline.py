@@ -101,7 +101,7 @@ class SolarEstimationPipeline:
         print("1. 512x512 EfficientNet-b5 (fastest)")
         print("2. 512x512 EfficientNet-b7")
         print("3. Base EfficientNet-b5")
-        print("4. Base EfficientNet-b7 (recommended)")
+        print("4. Base EfficientNet-b7")
         print("5. Base EfficientNet-b5 + LGBM")
         print("6. Base EfficientNet-b7 + LGBM (best quality)")
 
