@@ -4,7 +4,7 @@ from typing import List
 import cv2
 import pandas as pd
 from colorama import Fore, Style
-from config import VALIDATION_LIMITS
+from config import VALIDATION_LIMITS, PARAM_VALIDATION_RULES
 
 
 def validate_file_exists(filepath: str, description: str) -> bool:
@@ -46,56 +46,63 @@ def validate_numeric_range(value: float, param_name: str, min_val: float, max_va
 def validate_system_specs(specs_df: pd.DataFrame) -> bool:
     """Validate system specifications dataframe for required parameters and ranges.
     
-    Performs comprehensive validation of all system specification parameters including
-    geographical coordinates, calibration settings, time ranges, and system parameters.
-    Ensures all values are within acceptable physical and operational limits.
+    Performs comprehensive validation of all system specification parameters using
+    the validation rules defined in config.py. Validates data types, ranges, and
+    cross-parameter relationships.
     
     Args:
-        specs_df (pd.DataFrame): DataFrame containing system specifications loaded
-                               from the Excel file
-                               
+        specs_df: DataFrame containing system specifications loaded from Excel file
+        
     Returns:
-        bool: True if all specifications are valid, False if any validation fails
+        True if all specifications are valid, False otherwise
     """
-    try:
-        # Check latitude
-        lat = float(specs_df["Lattitude (°)"][0])
-        if not validate_numeric_range(lat, "Latitude", *VALIDATION_LIMITS["latitude"]):
+    
+    def validate_param(param_name: str, rules: dict) -> bool:
+        """Validate a single parameter against its validation rules.
+        
+        Args:
+            param_name: Name of the parameter to validate
+            rules: Dictionary containing validation rules (range, min_val, etc.)
+            
+        Returns:
+            True if parameter is valid, False otherwise
+        """
+        if param_name not in specs_df.columns:
+            print(f"{Fore.RED}Missing parameter: {param_name}{Style.RESET_ALL}")
             return False
-
-        # Check longitude
-        lon = float(specs_df["Longitude (°)"][0])
-        if not validate_numeric_range(lon, "Longitude", *VALIDATION_LIMITS["longitude"]):
+            
+        try:
+            value = float(specs_df[param_name][0])
+        except (ValueError, TypeError):
+            print(f"{Fore.RED}{param_name}: Invalid numeric value '{specs_df[param_name][0]}'{Style.RESET_ALL}")
             return False
-
-        # Check elevation
-        elev = float(specs_df["Elevation (m)"][0])
-        if not validate_numeric_range(elev, "Elevation", *VALIDATION_LIMITS["elevation"]):
-            return False
-
-        # Check positive values
-        positive_params = [
-            "Solar panel peak wattage (W)",
-            "Batt nominal capacity (Ah)",
-            "Batt nominal voltage (V)",
-        ]
-        for param in positive_params:
-            if float(specs_df[param][0]) <= 0:
-                print(f"{Fore.RED}{param} must be positive{Style.RESET_ALL}")
+        
+        # Check range if specified
+        if "range" in rules and rules["range"] in VALIDATION_LIMITS:
+            min_val, max_val = VALIDATION_LIMITS[rules["range"]]
+            if not (min_val <= value <= max_val):
+                print(f"{Fore.RED}{param_name} ({value}) outside valid range [{min_val}, {max_val}]{Style.RESET_ALL}")
                 return False
-
-        # Check percentages
-        percentage_params = ["Converter efficiency (%)", "Max SOC (%)", "Min SOC (%)"]
-        for param in percentage_params:
-            value = float(specs_df[param][0])
-            if not validate_numeric_range(value, param, *VALIDATION_LIMITS["percentage_range"]):
-                return False
-
+        
+        # Check minimum value if specified
+        if "min_val" in rules and value < rules["min_val"]:
+            print(f"{Fore.RED}{param_name} ({value}) below minimum value {rules['min_val']}{Style.RESET_ALL}")
+            return False
+            
         return True
+    
+    # Validate all parameters using configuration rules
+    all_valid = all(validate_param(param, rules) for param, rules in PARAM_VALIDATION_RULES.items())
+    
+    # Cross-parameter validation: start date must be before end date
+    if all_valid:
+        start_date = int(float(specs_df["Start year"][0]))
+        end_date = int(float(specs_df["End year"][0]))
+        if start_date > end_date:
+            print(f"{Fore.RED}Start date ({start_date}) must be before end date ({end_date}){Style.RESET_ALL}")
+            all_valid = False
 
-    except (ValueError, KeyError, IndexError) as e:
-        print(f"{Fore.RED}Error validating system specs: {e}{Style.RESET_ALL}")
-        return False
+    return all_valid
 
 
 def validate_images(image_dir: str, min_count: int = 1, extensions: List[str] = None) -> List[str]:
@@ -214,3 +221,26 @@ def validate_image_dimensions(sky_images: List[str], calib_images: List[str]) ->
         f"{Fore.GREEN}All {len(all_images)} images have consistent dimensions: {ref_width}x{ref_height}{Style.RESET_ALL}"
     )
     return True
+
+
+def ask_restart() -> bool:
+    """Ask user if they want to restart the program.
+    
+    Provides a numbered choice interface for the user to decide whether to
+    restart the application or exit gracefully.
+    
+    Returns:
+        bool: True if user wants to restart, False if they want to exit
+    """
+    print(f"\n{Fore.CYAN}Would you like to restart the program?{Style.RESET_ALL}")
+    print("0. Exit")
+    print("1. Restart")
+    
+    choice = get_user_choice("Enter choice (0/1): ", ["0", "1"])
+    
+    if choice == "0":
+        print(f"{Fore.GREEN}Thank you for using the Solar Estimation System!{Style.RESET_ALL}")
+        return False
+    else:
+        print(f"\n{Fore.YELLOW}Restarting program...{Style.RESET_ALL}\n")
+        return True

@@ -23,7 +23,7 @@ from state_of_charge_estimation import (
     state_of_charge_estimation_day_night,
 )
 from sunpath_from_astropy import sunpath_from_astropy
-from validation import get_user_choice, validate_image_dimensions
+from validation import get_user_choice
 
 
 class SolarEstimationPipeline:
@@ -82,12 +82,8 @@ class SolarEstimationPipeline:
         # Load sky images
         self.sky_image, self.flag_combination, self.all_images = load_sky_images()
 
-        # Load calibration images
-        self.calib_files = load_calibration_images()
-
-        # Validate image dimensions match
-        if not validate_image_dimensions(self.all_images, self.calib_files):
-            raise ValueError("Image dimensions don't match")
+        # Load calibration images (with dimension validation against sky images)
+        self.calib_files = load_calibration_images(self.all_images)
 
         print(f"{Fore.GREEN}All data loaded successfully{Style.RESET_ALL}")
 
@@ -191,7 +187,7 @@ class SolarEstimationPipeline:
         """
         print(f"{Fore.CYAN}Choose irradiance data source:{Style.RESET_ALL}")
         print("1. NASA POWER database (recommended)")
-        print("2. User-provided CSV file")
+        print("2. User-provided .csv/.xls/.xlsx file")
 
         choice = get_user_choice("Enter choice (1/2): ", ["1", "2"])
 

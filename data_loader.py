@@ -13,6 +13,7 @@ from validation import (
     validate_file_exists,
     validate_images,
     validate_system_specs,
+    validate_image_dimensions,
 )
 from elevation_api import verify_and_update_elevation
 try:
@@ -133,10 +134,11 @@ def load_sky_images() -> Tuple[np.ndarray, bool, List[str]]:
 
     # Handle multiple images
     if len(images) > 1:
-        choice = get_user_choice(
-            f"Found {len(images)} images. Combine them? (y/n): ", ["y", "n", "yes", "no"]
-        )
-        flag_combination = choice.lower() in ["y", "yes"]
+        print(f"{Fore.CYAN}Found {len(images)} images. Choose processing method:{Style.RESET_ALL}")
+        print("0. Use single image")
+        print("1. Combine all images (batch processing)")
+        choice = get_user_choice("Enter choice (0/1): ", ["0", "1"])
+        flag_combination = choice == "1"
     else:
         flag_combination = False
 
@@ -164,23 +166,32 @@ def load_sky_images() -> Tuple[np.ndarray, bool, List[str]]:
         return img, False, [selected]
 
 
-def load_calibration_images() -> List[str]:
+def load_calibration_images(sky_images: List[str] = None) -> List[str]:
     """Load calibration images for camera calibration process.
     
     Validates that at least 8 JPEG calibration images are present in the
-    CalibrationImages folder, as required for accurate camera calibration.
+    CalibrationImages folder and ensures their dimensions match sky images
+    if provided. Prompts user to fix dimension mismatches.
+    
+    Args:
+        sky_images: Optional list of sky image paths to validate dimensions against
     
     Returns:
         List[str]: List of file paths to valid calibration images
         
     Note:
-        Recursively calls itself if insufficient images are found until
-        user provides the required minimum number of calibration images.
+        Recursively calls itself if insufficient images are found or dimensions
+        don't match until user provides compatible images.
     """
     images = validate_images(PATHS["calibration_images"], min_count=8, extensions=[".jpg"])
     if not images:
         prompt_for_file("Add at least 8 calibration images to CalibrationImages folder.")
-        return load_calibration_images()
+        return load_calibration_images(sky_images)
+
+    # Validate image dimensions if sky images are provided
+    if sky_images and not validate_image_dimensions(sky_images, images):
+        prompt_for_file("Fix calibration image dimensions to match sky images.")
+        return load_calibration_images(sky_images)
 
     print(f"{Fore.GREEN}Found {len(images)} calibration images{Style.RESET_ALL}")
     return images
@@ -190,7 +201,7 @@ def load_status_file() -> dict:
     """Load status file or create empty dictionary if file doesn't exist.
     
     Attempts to load the YAML status file that tracks processing pipeline state.
-    If the file doesn't exist or is corrupted, returns an empty dictionary.
+    If the file doesn't exist or is corrupted, removes the corrupted file and returns an empty dictionary.
     
     Returns:
         dict: Status data loaded from YAML file, or empty dict if loading fails
@@ -198,9 +209,19 @@ def load_status_file() -> dict:
     if os.path.exists(PATHS["status_file"]):
         try:
             with open(PATHS["status_file"], "r") as f:
-                return yaml.safe_load(f) or {}
-        except Exception:
-            pass
+                data = yaml.safe_load(f)
+                # Ensure we return a dict even if file is empty or contains wrong data type
+                if isinstance(data, dict):
+                    return data
+                else:
+                    # File contains non-dict data, remove and start fresh
+                    print(f"{Fore.RED}Warning: Status file contains invalid data format. Starting fresh.{Style.RESET_ALL}")
+                    os.remove(PATHS["status_file"])
+                    return {}
+        except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
+            print(f"{Fore.RED}Warning: Could not load status file: {e}{Style.RESET_ALL}")
+            print(f"{Fore.RED}Removing corrupted file and starting fresh.{Style.RESET_ALL}")
+            os.remove(PATHS["status_file"])
     return {}
 
 
@@ -218,7 +239,7 @@ def save_status_file(status_data: dict) -> None:
         with open(PATHS["status_file"], "w") as f:
             yaml.dump(status_data, f, default_flow_style=False)
     except Exception as e:
-        print(f"{Fore.YELLOW}Warning: Could not save status file: {e}{Style.RESET_ALL}")
+        print(f"{Fore.RED}Warning: Could not save status file: {e}{Style.RESET_ALL}")
 
 
 def load_custom_irradiance_data(
@@ -385,7 +406,7 @@ def load_custom_irradiance_data(
             return None, None, None, None
 
         # Resample to hourly data for consistent analysis
-        df = df.resample('H').mean()
+        df = df.resample('h').mean()
 
         # Get remaining columns (excluding datetime)
         remaining_cols = [col for col in df.columns]

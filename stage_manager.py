@@ -60,19 +60,34 @@ class StageManager:
         """Load stage status from YAML file.
         
         Reads the status file and reconstructs StageInfo objects from saved data.
-        If the file doesn't exist or is corrupted, starts with empty stages.
+        If the file doesn't exist or is corrupted, removes the corrupted file and starts with empty stages.
         """
         try:
             if os.path.exists(self.status_file):
                 with open(self.status_file, "r") as f:
-                    data = yaml.safe_load(f) or {}
+                    data = yaml.safe_load(f)
+
+                # Check if data is valid
+                if not isinstance(data, dict):
+                    print(f"{Fore.RED}Warning: Status file contains invalid data format. Starting fresh.{Style.RESET_ALL}")
+                    os.remove(self.status_file)
+                    self.stages = {}
+                    return
 
                 stages_data = data.get("stages", {})
+                if not isinstance(stages_data, dict):
+                    print(f"{Fore.RED}Warning: Status file stages data is corrupted. Starting fresh.{Style.RESET_ALL}")
+                    os.remove(self.status_file)
+                    self.stages = {}
+                    return
+
                 for stage_name, stage_data in stages_data.items():
                     self.stages[stage_name] = StageInfo(**stage_data)
 
-        except Exception as e:
-            print(f"{Fore.YELLOW}Warning: Could not load stage status: {e}{Style.RESET_ALL}")
+        except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
+            print(f"{Fore.RED}Warning: Could not load stage status: {e}{Style.RESET_ALL}")
+            print(f"{Fore.RED}Removing corrupted file and starting fresh.{Style.RESET_ALL}")
+            os.remove(self.status_file)
             self.stages = {}
 
     def _save_status(self) -> None:
