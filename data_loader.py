@@ -248,16 +248,17 @@ def load_custom_irradiance_data(
     """Load irradiance data from custom CSV/Excel file in SystemData folder.
     
     Allows users to select and load irradiance data from CSV or Excel files,
-    with support for GHI decomposition using the Erbs model.
+    with support for GHI decomposition using the Erbs model. Filters data to
+    match the user-specified date range.
     
     Args:
-        time_array: Reference time array for solar calculations
+        time_array: Reference time array for solar calculations (defines date range)
         lat: Latitude in degrees
         lon: Longitude in degrees
         
     Returns:
         Tuple containing:
-            - pd.DatetimeIndex: Datetime column from the loaded file
+            - pd.DatetimeIndex: Datetime column filtered to the requested date range
             - np.ndarray: Direct irradiance values (DNI or decomposed)
             - np.ndarray: Diffuse irradiance values (DHI or decomposed)
             - str: Irradiance type ('normal' for DNI, 'horizontal' for GHI)
@@ -352,6 +353,54 @@ def load_custom_irradiance_data(
 
         return erbs_result["dni"].values, erbs_result["dhi"].values, "normal"
 
+    def filter_and_validate_data(df: pd.DataFrame, time_array: pd.DatetimeIndex, direct_irr: np.ndarray, diffuse_irr: np.ndarray, irr_type: str) -> Tuple[Optional[pd.DatetimeIndex], Optional[np.ndarray], Optional[np.ndarray], Optional[str]]:
+        """Filter irradiance data to match the requested time range and validate coverage.
+        
+        Args:
+            df: DataFrame with datetime index
+            time_array: Requested time range from user specifications
+            direct_irr: Direct irradiance values
+            diffuse_irr: Diffuse irradiance values
+            irr_type: Type of irradiance data
+            
+        Returns:
+            Tuple of filtered datetime index, direct irradiance, diffuse irradiance, and type
+            Returns None values if date range is not covered by the data
+        """
+        # Get the requested date range from the time_array
+        start_datetime = time_array[0]
+        end_datetime = time_array[-1]
+        
+        # Ensure both the loaded data and time_array are timezone-naive for comparison
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        if start_datetime.tz is not None:
+            start_datetime = start_datetime.tz_localize(None)
+        if end_datetime.tz is not None:
+            end_datetime = end_datetime.tz_localize(None)
+        
+        # Check if the loaded data covers the requested range
+        if start_datetime < df.index[0] or end_datetime > df.index[-1]:
+            print(f"{Fore.RED}Error: Requested time range ({start_datetime} to {end_datetime}) is not fully covered by the data{Style.RESET_ALL}")
+            print(f"{Fore.RED}Available data range: {df.index[0]} to {df.index[-1]}{Style.RESET_ALL}")
+            return None, None, None, None
+        
+        # Filter the DataFrame to the requested range
+        mask = (df.index >= start_datetime) & (df.index <= end_datetime)
+        filtered_df = df[mask]
+        
+        if filtered_df.empty:
+            print(f"{Fore.RED}No data found in the requested date range{Style.RESET_ALL}")
+            return None, None, None, None
+        
+        # Filter irradiance arrays to match
+        filtered_direct = direct_irr[mask]
+        filtered_diffuse = diffuse_irr[mask]
+        
+        print(f"{Fore.GREEN}Data filtered to requested range: {len(filtered_df)} hourly records{Style.RESET_ALL}")
+        
+        return filtered_df.index, filtered_direct, filtered_diffuse, irr_type
+
     # List available files
     available_files = get_available_files()
 
@@ -424,7 +473,10 @@ def load_custom_irradiance_data(
             ghi_values = df[ghi_col].values
             direct_irr, diffuse_irr, irr_type = apply_erbs_model(ghi_values, df.index, lat, lon)
 
-            return df.index, direct_irr, diffuse_irr, irr_type
+            if direct_irr is None or diffuse_irr is None:
+                return None, None, None, None
+
+            return filter_and_validate_data(df, time_array, direct_irr, diffuse_irr, irr_type)
 
         else:
             # Multiple columns - let user choose approach
@@ -448,7 +500,10 @@ def load_custom_irradiance_data(
                 ghi_values = df[ghi_col].values
                 direct_irr, diffuse_irr, irr_type = apply_erbs_model(ghi_values, df.index, lat, lon)
 
-                return df.index, direct_irr, diffuse_irr, irr_type
+                if direct_irr is None or diffuse_irr is None:
+                    return None, None, None, None
+
+                return filter_and_validate_data(df, time_array, direct_irr, diffuse_irr, irr_type)
 
             else:
                 # Direct + Diffuse selection
@@ -486,7 +541,7 @@ def load_custom_irradiance_data(
                 direct_irr = df[direct_col].values
                 diffuse_irr = df[diffuse_col].values
 
-                return df.index, direct_irr, diffuse_irr, irr_type
+                return filter_and_validate_data(df, time_array, direct_irr, diffuse_irr, irr_type)
 
     except Exception as e:
         print(f"{Fore.RED}Error loading file: {e}{Style.RESET_ALL}")

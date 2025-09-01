@@ -28,85 +28,130 @@ def angular_distance(vec1: np.ndarray, vec2: np.ndarray) -> float:
     return np.degrees(np.arccos(dot))
 
 
-def compute_sun_disk_radius(
-    azimuth_deg: float,
-    zenith_deg: float,
-    psi: float,
-    omega: float,
-    principal_point: np.ndarray,
-    poly_incident_angle_to_radius: np.ndarray,
-    include_circumsolar: bool = False
-) -> float:
+def detect_isolated_outliers(
+    image_coords: np.ndarray
+) -> np.ndarray:
     """
-    Estimate the apparent pixel radius of the sun's disk in a fisheye image.
-
+    Detect isolated outliers by checking if both neighboring points are far away.
+    Uses trajectory-based threshold estimation rather than fixed image dimensions.
+    
     Args:
-        azimuth_deg: Solar azimuth angle in degrees
-        zenith_deg: Solar zenith angle in degrees
-        psi: Image orientation angle in degrees
-        omega: Image inclination angle in degrees
-        principal_point: Image principal point coordinates [x, y]
-        poly_incident_angle_to_radius: Polynomial coefficients for angle-to-radius mapping
-        include_circumsolar: Whether to include circumsolar region (default: False)
-
+        image_coords: Array of projected image coordinates (N, 2)
+        
     Returns:
-        float: Estimated radius of the sun disk in pixels
-
-    Raises:
-        ValueError: If sun disk radius calculation fails due to invalid angles
-
-    Note:
-        When include_circumsolar is True, uses 2.5° for radius instead of 0.53°/2
+        np.ndarray: Boolean mask where True indicates outlier positions
     """
-    # Angular radius of the sun
-    if include_circumsolar:
-        sun_radius_angle_deg = 2.5
+    n_points = len(image_coords)
+    outlier_mask = np.zeros(n_points, dtype=bool)
+    
+    if n_points < 3:
+        return outlier_mask
+    
+    # Calculate all consecutive distances to estimate normal trajectory spacing
+    consecutive_distances = []
+    for i in range(1, n_points):
+        dist = np.sqrt(np.sum((image_coords[i] - image_coords[i-1])**2))
+        consecutive_distances.append(dist)
+    
+    consecutive_distances = np.array(consecutive_distances)
+    
+    # Use median distance as robust estimate of normal trajectory spacing
+    median_distance = np.median(consecutive_distances)
+    
+    # Set threshold based on trajectory characteristics
+    distance_threshold = 3 * median_distance
+    outliers_detected = 0
+    
+    # Check each point, including first and last
+    for i in range(n_points):
+        current_point = image_coords[i]
+        
+        if i == 0:
+            # First point: only check distance to next point
+            if n_points > 1:
+                next_point = image_coords[i + 1]
+                dist_to_next = np.sqrt(np.sum((current_point - next_point)**2))
+                if dist_to_next > distance_threshold:
+                    outlier_mask[i] = True
+                    outliers_detected += 1
+        
+        elif i == n_points - 1:
+            # Last point: only check distance to previous point
+            prev_point = image_coords[i - 1]
+            dist_to_prev = np.sqrt(np.sum((current_point - prev_point)**2))
+            if dist_to_prev > distance_threshold:
+                outlier_mask[i] = True
+                outliers_detected += 1
+        
+        else:
+            # Middle points: check distances to both neighbors
+            prev_point = image_coords[i - 1]
+            next_point = image_coords[i + 1]
+            
+            # Calculate distances to neighbors
+            dist_to_prev = np.sqrt(np.sum((current_point - prev_point)**2))
+            dist_to_next = np.sqrt(np.sum((current_point - next_point)**2))
+            
+            # If both neighbors are far away, mark as outlier
+            if dist_to_prev > distance_threshold and dist_to_next > distance_threshold:
+                outlier_mask[i] = True
+                outliers_detected += 1
+    
+    print(f"{Fore.YELLOW}Trajectory-based outlier detection: "
+          f"Found {outliers_detected} isolated outliers ({outliers_detected/n_points*100:.1f}%){Style.RESET_ALL}")
+
+    return outlier_mask
+
+
+def compute_outliers_robust(
+    disk_radii: np.ndarray,
+    k_factor: float = 3.0,
+    epsilon: float = 0.1
+) -> Tuple[np.ndarray, dict]:
+    """
+    Compute outliers using robust statistical methods with iterative refinement to handle
+    cases where outliers make up a significant portion of the data.
+    
+    Args:
+        disk_radii: Array of disk radius measurements
+        k_factor: Threshold factor for MAD-based outlier detection (default 3.0)
+        epsilon: Minimum relative threshold as fraction of median (default 0.1)
+    
+    Returns:
+        outlier_mask: Boolean array where True indicates outlier
+    """
+    if len(disk_radii) == 0:
+        return np.array([], dtype=bool), {}
+    
+    # First, try a simple threshold approach for extreme outliers
+    # If we detect values that are more than 10x the minimum, start there
+    min_val = np.min(disk_radii)
+    extreme_threshold = 10 * min_val
+    extreme_outliers = disk_radii > extreme_threshold
+    
+    # If we have extreme outliers, use them to guide initial filtering
+    if np.any(extreme_outliers):
+        # Use the non-extreme values to compute robust statistics
+        candidate_inliers = disk_radii[~extreme_outliers]
+        robust_median = np.median(candidate_inliers)
+        robust_mad = np.median(np.abs(candidate_inliers - robust_median))
     else:
-        sun_radius_angle_deg = 0.53 / 2
+        robust_median = np.median(disk_radii)
+        robust_mad = np.median(np.abs(disk_radii - robust_median))
+    
+    # Apply robust scale factor
+    robust_scale = 1.4826 * robust_mad
+    
+    # Robust fence with floor to prevent scale collapse
+    # τ = max(k×sMAD, ε×m)
+    mad_threshold = k_factor * robust_scale
+    min_threshold = epsilon * robust_median  # Minimum relative threshold
 
-    # Central vector (sun center)
-    center_vec = astropy_to_camera_extrinsic([azimuth_deg, zenith_deg], psi, omega)
-    sun_center = camera_coords_to_image_intrinsic(
-        center_vec, poly_incident_angle_to_radius, principal_point)
-
-    # Offset vectors (sun edge), just slightly more or less zenith (i.e., toward horizon)
-    # We compute both the positive and negative offsets to ensure we capture
-    # the sun's disk correctly
-    positive_offset_edge_vec = astropy_to_camera_extrinsic(
-        [azimuth_deg, zenith_deg + sun_radius_angle_deg], psi, omega
-    )
-    positive_offset_edge = camera_coords_to_image_intrinsic(
-        positive_offset_edge_vec, poly_incident_angle_to_radius, principal_point
-    )
-    sun_distance_to_positive_edge = np.linalg.norm(positive_offset_edge - sun_center)
-
-    negative_offset_edge_vec = astropy_to_camera_extrinsic(
-        [azimuth_deg, zenith_deg - sun_radius_angle_deg], psi, omega
-    )
-    negative_offset_edge = camera_coords_to_image_intrinsic(
-        negative_offset_edge_vec, poly_incident_angle_to_radius, principal_point
-    )
-    sun_distance_to_negative_edge = np.linalg.norm(negative_offset_edge - sun_center)
-
-    angle_pos = angular_distance(center_vec, positive_offset_edge_vec)
-    angle_neg = angular_distance(center_vec, negative_offset_edge_vec)
-    # For circumsolar regions, we need more lenient validation
-    # Allow up to 3x the expected angle to account for projection distortions
-    max_allowed_angle = sun_radius_angle_deg * 3
-    ok_pos = 0 < angle_pos < max_allowed_angle
-    ok_neg = 0 < angle_neg < max_allowed_angle
-
-    if ok_pos and ok_neg:
-        return max(sun_distance_to_positive_edge, sun_distance_to_negative_edge)
-    elif ok_pos:
-        return sun_distance_to_positive_edge
-    elif ok_neg:
-        return sun_distance_to_negative_edge
-    else:
-        raise ValueError(
-            f"{Fore.RED}Sun disk radius calculation failed for azimuth={azimuth_deg}, zenith={zenith_deg}. "
-            f"Detected Angles: pos={angle_pos:.3f}, neg={angle_neg:.3f}. "
-            f"Distances: pos={sun_distance_to_positive_edge:.3f}, neg={sun_distance_to_negative_edge:.3f}.{Style.RESET_ALL}")
+    threshold = max(mad_threshold, min_threshold)
+    
+    # Final outlier detection using robust statistics
+    outlier_mask = np.abs(disk_radii - robust_median) > threshold
+    return outlier_mask
 
 
 def compute_sun_disk_radius_pixels(
@@ -133,7 +178,6 @@ def compute_sun_disk_radius_pixels(
         num_samples: Number of points to sample around the Sun disk edge
 
     Returns:
-        sun_center_img: [x, y] image coordinates of the Sun center
         radius_pix: Estimated pixel radius of the Sun disk
     """
 
@@ -171,9 +215,6 @@ def compute_sun_disk_radius_pixels(
         az = np.degrees(np.arctan2(v[0], v[1])) % 360
         disk_az_ze.append([az, ze])
 
-    # print(f"disk_vectors: {disk_vectors}")
-    # print(f"disk_az_ze: {disk_az_ze}")
-
     # Convert disk points to image coordinates
     disk_cam_coords = [
         astropy_to_camera_extrinsic([az, ze], psi, omega)
@@ -193,20 +234,15 @@ def compute_sun_disk_radius_pixels(
     radii = [np.linalg.norm(pt - sun_center_img) for pt in disk_img_coords]
     radii = np.array(radii)
 
-    # print(f"disk_img_coords: {disk_img_coords}")
-    # print(f"sun_center_img: {sun_center_img}")
-    # print(f"radii: {radii}")
-
-    # Use median + MAD (median absolute deviation)
-    median = np.median(radii)
-    mad = np.median(np.abs(radii - median))
-
-    # Keep only values within a robust range (e.g., 3 * MAD)
-    good_radii = radii[np.abs(radii - median) < 3 * mad]
-
+    # Use robust outlier detection
+    outlier_mask = compute_outliers_robust(
+        radii,
+        k_factor=3.0,
+        epsilon=0.1
+    )
+    good_radii = radii[~outlier_mask]
     if len(good_radii) == 0:
-        return median  # fallback to median
-
+        return np.median(radii)
     return float(np.mean(good_radii))
 
 
@@ -328,6 +364,11 @@ def compute_direct_shading_factor_generic(
         principal_point
     )
 
+    # Detect and remove isolated outliers
+    outlier_mask = detect_isolated_outliers(image_coords)
+    image_coords = image_coords[~outlier_mask]
+    valid_indices = valid_indices[~outlier_mask]
+    
     # Process image and create visualization
     image = image.astype(np.uint8)
     trajectory_image = cv2.cvtColor(image.copy(), cv2.COLOR_GRAY2BGR)
@@ -344,24 +385,15 @@ def compute_direct_shading_factor_generic(
         pt2 = tuple(map(int, image_coords[i]))
 
         # Calculate sun disk radius
-        # radius_px = round(compute_sun_disk_radius(
-        #     az_array[i],
-        #     zen_array[i],
-        #     image_orientation,
-        #     image_inclination,
-        #     principal_point,
-        #     poly_incident_angle_to_radius,
-        #     include_circumsolar=True
-        # ))
-
-        radius_px = round(compute_sun_disk_radius_pixels(
+        radius_px = compute_sun_disk_radius_pixels(
             az_array[i],
             zen_array[i],
             image_orientation,
             image_inclination,
             poly_incident_angle_to_radius,
             principal_point,
-        ))
+        )
+        radius_px = round(radius_px)
 
         # Draw sun path and disk
         path_thickness = radius_px * 2
