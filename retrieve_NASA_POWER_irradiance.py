@@ -87,6 +87,23 @@ def retrieve_NASA_POWER_irradiance(
         direct_data = df['ALLSKY_SFC_SW_DNI']
         diffuse_data = df['ALLSKY_SFC_SW_DIFF']
 
+        # Check for missing values (NASA POWER uses -999 as fill value for missing data)
+        direct_missing_mask = (direct_data == -999)
+        diffuse_missing_mask = (diffuse_data == -999)
+        
+        if direct_missing_mask.any() or diffuse_missing_mask.any():
+            # Find the first date where data becomes unavailable
+            first_missing_idx = None
+            if direct_missing_mask.any():
+                first_missing_idx = direct_missing_mask.idxmax()
+            if diffuse_missing_mask.any():
+                diffuse_first_missing = diffuse_missing_mask.idxmax()
+                if first_missing_idx is None or diffuse_first_missing < first_missing_idx:
+                    first_missing_idx = diffuse_first_missing
+            
+            first_missing_date = pd.to_datetime(first_missing_idx, format="%Y%m%d%H")
+            print(f"{Fore.RED}Warning: NASA POWER data contains missing values starting from {first_missing_date.strftime('%Y-%m-%d %H:%M UTC')}{Style.RESET_ALL}")
+
         print(f"{Fore.GREEN}Successfully retrieved NASA POWER data{Style.RESET_ALL}")
         return direct_data.to_numpy(), diffuse_data.to_numpy(), datetime_index
 

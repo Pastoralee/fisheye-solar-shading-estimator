@@ -17,9 +17,9 @@ def create_image(
     principal_point: List[float]
 ) -> None:
     """
-    Create and save a visualization of the FOV on a sample image.
+    Create and save a visualization of the FOV on a calibration image.
 
-    Draws FOV circle and angle markers on the first available image to help
+    Draws FOV circle and angle markers on the first available calibration image to help
     validate the FOV estimation.
 
     Args:
@@ -27,8 +27,8 @@ def create_image(
         poly_incident_angle_to_radius: Polynomial coefficients for angle to radius mapping
         principal_point: Image center coordinates [x, y]
     """
-    # Find available images
-    folder = PATHS['sky_images']
+    # Find available calibration images
+    folder = PATHS['calibration_images']
     valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}
     images = [
         f for f in glob(os.path.join(folder, "*"))
@@ -36,7 +36,7 @@ def create_image(
     ]
 
     if not images:
-        print(f"{Fore.RED}No images found in {folder}{Style.RESET_ALL}")
+        print(f"{Fore.RED}No calibration images found in {folder}{Style.RESET_ALL}")
         return
 
     # Load first image and calculate FOV circle parameters
