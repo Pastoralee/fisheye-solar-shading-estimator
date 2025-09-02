@@ -436,7 +436,7 @@ class SolarEstimationPipeline:
         # Define stage input files for change detection
         stage_inputs = {
             ProcessingStage.CALIBRATION: self.calib_files,
-            ProcessingStage.RAW_IRRADIANCE: self.all_images,
+            ProcessingStage.RAW_IRRADIANCE: [],
             ProcessingStage.SHADING: [PATHS["calibration_file"]] + self.all_images,
             ProcessingStage.STATE_OF_CHARGE: [
                 PATHS["consumption_profile"],

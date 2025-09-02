@@ -1,3 +1,4 @@
+import traceback
 from colorama import Fore, Style, init
 from pipeline import SolarEstimationPipeline
 from validation import ask_restart
@@ -34,6 +35,17 @@ def main() -> None:
 
         except Exception as e:
             print(f"\n{Fore.RED}An unexpected error occurred: {e}")
+            
+            # Get the current traceback for detailed error information
+            tb = traceback.extract_tb(e.__traceback__)
+            if tb:
+                # Get the last frame (where the error occurred)
+                filename, line_num, func_name, text = tb[-1]
+                print(f"Error location: {filename}")
+                print(f"Line: {line_num}")
+                print(f"Function: '{func_name}'")
+                if text:
+                    print(f"Code: {text}{Style.RESET_ALL}")
             
             # Ask user if they want to restart after an error
             if not ask_restart():

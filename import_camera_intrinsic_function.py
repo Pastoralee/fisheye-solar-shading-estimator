@@ -147,7 +147,7 @@ def estimate_fov_optimized(
         reprojection_error,
         x0=60,  # Initial guess
         method='Nelder-Mead',
-        bounds=[(20, 90)]  # Constrain FOV between 20° and 90°
+        bounds=[(20, 89)]  # Constrain FOV between 20° and 89°
     )
 
     return result.x[0] if result.success else None

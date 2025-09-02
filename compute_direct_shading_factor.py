@@ -2,6 +2,7 @@ from typing import Optional, List, Tuple
 import numpy as np
 from tqdm import tqdm
 import cv2
+import os
 from colorama import Fore, Style
 from config import PATHS
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
@@ -411,7 +412,6 @@ def compute_direct_shading_factor_generic(
             complementary_direct_shading_factor[idx] = visible_pixels / total_pixels
 
     # Save visualization
-    import os
     debug_path = os.path.join(PATHS["debug_data"], 'sun_trajectory.jpg')
     os.makedirs(os.path.dirname(debug_path), exist_ok=True)
     cv2.imwrite(debug_path, trajectory_image)
