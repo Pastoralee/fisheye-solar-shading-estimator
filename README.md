@@ -57,7 +57,9 @@ pip install -r requirements.txt
 ### Step 4: Prepare Input Data
 
 1. **Calibration Images**: Place chessboard calibration images in `CalibrationImages/`
+   - *Default images included*: The repository includes multiple sample calibration images (IMG_1.jpg through IMG_36.jpg) to get you started
 2. **Sky Images**: Place site fisheye images for analysis in `SkyImageOfSite/`
+   - *Default image included*: The repository includes an example sky image (`example_image.jpg`) for testing purposes
 3. **System Configuration**: Configure system parameters in `SystemData/` using provided Excel templates:
    - `System_Specifications.xlsx` (Location, camera setup, solar system specs)
    - `Consumption_Profile.xlsx` (Hourly energy consumption profile)
@@ -74,7 +76,7 @@ python main.py
 
 The program will guide you through:
 1. Loading and validating user data and system specifications
-2. Camera calibration (if needed)
+2. Camera calibration
 3. Solar position and irradiance data calculation
 4. Shading factor computation from sky images using ML models
 5. Battery state of charge estimation
