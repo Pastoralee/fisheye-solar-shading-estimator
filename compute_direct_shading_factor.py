@@ -108,10 +108,12 @@ def compute_outliers_robust(
     disk_radii: np.ndarray,
     k_factor: float = 3.0,
     epsilon: float = 0.1
-) -> Tuple[np.ndarray, dict]:
+) -> np.ndarray:
     """
-    Compute outliers using robust statistical methods with iterative refinement to handle
-    cases where outliers make up a significant portion of the data.
+    Detect outliers based on simple criteria:
+    - Values that are too high (beyond median + k_factor * MAD)
+    - Values that are too low (below median - k_factor * MAD)
+    - Extremely low values (under 1 pixel)
     
     Args:
         disk_radii: Array of disk radius measurements
@@ -122,36 +124,41 @@ def compute_outliers_robust(
         outlier_mask: Boolean array where True indicates outlier
     """
     if len(disk_radii) == 0:
-        return np.array([], dtype=bool), {}
+        return np.array([], dtype=bool)
     
-    # First, try a simple threshold approach for extreme outliers
-    # If we detect values that are more than 10x the minimum, start there
-    min_val = np.min(disk_radii)
-    extreme_threshold = 10 * min_val
-    extreme_outliers = disk_radii > extreme_threshold
+    # First, detect extremely low values
+    extremely_low = disk_radii <= 1.0
     
-    # If we have extreme outliers, use them to guide initial filtering
-    if np.any(extreme_outliers):
-        # Use the non-extreme values to compute robust statistics
-        candidate_inliers = disk_radii[~extreme_outliers]
-        robust_median = np.median(candidate_inliers)
-        robust_mad = np.median(np.abs(candidate_inliers - robust_median))
+    # Filter out extremely low values before computing robust statistics
+    valid_radii = disk_radii[~extremely_low]
+    
+    # If all values are extremely low, mark all as outliers
+    if len(valid_radii) == 0:
+        return np.array([], dtype=bool)
+    
+    # Calculate robust statistics using median and MAD on valid values
+    median_val = np.median(valid_radii)
+    mad = np.median(np.abs(valid_radii - median_val))
+    
+    # Apply robust scale factor (MAD to standard deviation conversion)
+    robust_scale = 1.4826 * mad
+    
+    # Set threshold with minimum floor to prevent scale collapse
+    threshold = max(k_factor * robust_scale, epsilon * median_val)
+    
+    # Detect outliers:
+    # 1. Values too high (beyond upper threshold)
+    too_high = disk_radii > (median_val + threshold)
+    
+    # 2. Values too low
+    if median_val > threshold:
+        too_low = disk_radii < (median_val - threshold)
     else:
-        robust_median = np.median(disk_radii)
-        robust_mad = np.median(np.abs(disk_radii - robust_median))
+        too_low = disk_radii < median_val * 0.33
     
-    # Apply robust scale factor
-    robust_scale = 1.4826 * robust_mad
+    # Combine all outlier conditions
+    outlier_mask = too_high | too_low | extremely_low
     
-    # Robust fence with floor to prevent scale collapse
-    # τ = max(k×sMAD, ε×m)
-    mad_threshold = k_factor * robust_scale
-    min_threshold = epsilon * robust_median  # Minimum relative threshold
-
-    threshold = max(mad_threshold, min_threshold)
-    
-    # Final outlier detection using robust statistics
-    outlier_mask = np.abs(disk_radii - robust_median) > threshold
     return outlier_mask
 
 
@@ -397,9 +404,10 @@ def compute_direct_shading_factor_generic(
         radius_px = round(radius_px)
 
         # Draw sun path and disk
-        path_thickness = radius_px * 2
+        path_thickness = int(max(1, radius_px * 2))
         cv2.line(mask_im, pt1, pt2, 255, path_thickness)
-        cv2.circle(mask_im, pt2, radius_px, 255, -1)
+        if radius_px > 0:
+            cv2.circle(mask_im, pt2, radius_px, 255, -1)
 
         # Draw visualization
         cv2.line(trajectory_image, pt1, pt2, (0, 0, 255), path_thickness)

@@ -5,7 +5,7 @@ import numpy as np
 import yaml as yml
 import torch
 import lightgbm as lgb
-from scipy.ndimage import uniform_filter, generic_filter
+from scipy.ndimage import uniform_filter, shift
 import segmentation_models_pytorch as smp
 from colorama import Fore, Style
 from config import PATHS
@@ -13,80 +13,39 @@ from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 from import_camera_intrinsic_function import import_camera_intrinsic_function
 
 
-def check_model_availability(
-    pathModel: str,
-    model_name: str = 'efficientnet-b5',
-    use_lgbm: bool = False
-) -> bool:
-    """
-    Check if required machine learning model files are available.
-
+def detect_available_models(pathModel: str) -> Tuple[List[str], List[str]]:
+    """Detect available EfficientNet and LightGBM models in the system directory.
+    
+    Scans the model directory for efficientnet-b4.pt through efficientnet-b7.pt
+    and their corresponding LightGBM meta-models.
+    
     Args:
         pathModel (str): Directory containing model checkpoints
-        model_name (str): EfficientNet backbone version
-        use_lgbm (bool): Whether LightGBM refinement model is needed
-
+        
     Returns:
-        bool: True if all required models are available, False otherwise
+        Tuple[List[str], List[str]]: 
+            - List of available EfficientNet model names (e.g., ['efficientnet-b5', 'efficientnet-b7'])
+            - List of available LightGBM model versions (e.g., ['b5', 'b7'])
     """
-    # Check if model directory exists
     if not os.path.exists(pathModel):
-        print(f"{Fore.RED}Model directory not found: {pathModel}{Style.RESET_ALL}")
-        return False
-
-    # Check for main model checkpoint
-    checkpoint_path = os.path.join(pathModel, f'{model_name}.pt')
-    if not os.path.isfile(checkpoint_path):
-        print(f"{Fore.RED}Main model checkpoint not found: {checkpoint_path}{Style.RESET_ALL}")
-        return False
-
-    # Check for LightGBM model if required
-    if use_lgbm:
-        lgbm_name = f"meta_model_{model_name.split('-')[-1]}.txt"
-        lgbm_model_path = os.path.join(pathModel, lgbm_name)
-        if not os.path.isfile(lgbm_model_path):
-            print(f"{Fore.RED}LightGBM model not found: {lgbm_model_path}{Style.RESET_ALL}")
-            return False
-
-    return True
-
-
-def wait_for_models(
-    pathModel: str = None,
-    model_name: str = 'efficientnet-b5',
-    use_lgbm: bool = False
-) -> None:
-    """
-    Wait for user to add missing machine learning models.
-
-    This function checks for model availability and prompts the user to add
-    missing model files if they are not found.
-
-    Args:
-        pathModel (str): Directory where models should be located (defaults to system_data path)
-        model_name (str): EfficientNet backbone version
-        use_lgbm (bool): Whether LightGBM refinement model is needed
-    """
-    if pathModel is None:
-        pathModel = PATHS["system_data"]
+        return [], []
+    
+    available_models = []
+    available_lgbm = []
+    
+    # Check for EfficientNet models (b4 through b7)
+    for version in ['b4', 'b5', 'b6', 'b7']:
+        model_name = f'efficientnet-{version}'
+        checkpoint_path = os.path.join(pathModel, f'{model_name}.pt')
+        if os.path.isfile(checkpoint_path):
+            available_models.append(model_name)
         
-    while not check_model_availability(pathModel, model_name, use_lgbm):
-        print(f"\n{Fore.RED}Missing machine learning model files!{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}Required files in {pathModel}:{Style.RESET_ALL}")
-        print(f"- {model_name}.pt (main segmentation model)")
-        if use_lgbm:
-            lgbm_name = f"meta_model_{model_name.split('-')[-1]}.txt"
-            print(f"- {lgbm_name} (LightGBM refinement model)")
-        
-        print(f"\n{Fore.CYAN}To obtain these models:{Style.RESET_ALL}")
-        print("1. Download from: https://drive.google.com/drive/folders/1PnKakX55PCW72MTsl-TXBb6TM5EOUejA")
-        print("2. Navigate to the 'Models' folder")
-        print("3. Download the required model files")
-        print(f"4. Place them in the {pathModel} directory")
-        
-        input(f"\n{Fore.CYAN}Add the missing model files and press Enter to continue...{Style.RESET_ALL}")
-
-    print(f"{Fore.GREEN}All required model files found!{Style.RESET_ALL}")
+        # Check for corresponding LightGBM model
+        lgbm_path = os.path.join(pathModel, f'meta_model_{version}.txt')
+        if os.path.isfile(lgbm_path):
+            available_lgbm.append(version)
+    
+    return available_models, available_lgbm
 
 
 def estimate_radius(pprad_path: str) -> None:
@@ -231,27 +190,38 @@ def gray_contrast_energy(image: np.ndarray) -> np.ndarray:
     return min_max_norm(CE_c)
 
 
-def texture_patch(gray_img: np.ndarray, patch_size: int) -> np.ndarray:
+def texture_patch(gray_img, patch_size):
     """
-    Calculate local texture features for each pixel in a grayscale image.
-
-    This function computes texture by measuring the average absolute difference
-    between each pixel and its neighbors within a patch.
+    Compute local texture of a grayscale image using pixel neighborhood differences.
 
     Args:
-        gray_img (np.ndarray): Input grayscale image array.
-        patch_size (int): Size of the local neighborhood for texture calculation.
+        gray_img (np.ndarray): Grayscale image.
+        patch_size (int): Size of the patch.
 
     Returns:
-        np.ndarray: Array of local texture values for each pixel.
+        np.ndarray: Texture map of the same shape as input.
     """
-    def local_texture(patch: np.ndarray) -> float:
-        """Calculate texture measure for a single patch."""
-        center = patch[len(patch) // 2]
-        diffs = np.abs(patch - center)
-        return np.sum(diffs) / (len(patch) - 1)
+    r = patch_size // 2
+    N = patch_size * patch_size - 1  # exclude center
+    acc = np.zeros_like(gray_img)
 
-    return generic_filter(gray_img, local_texture, size=patch_size, mode='reflect')
+    # Loop over neighborhood offsets
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            if dy == 0 and dx == 0:
+                continue  # skip center pixel
+
+            neigh = shift(
+                gray_img,
+                shift=(dy, dx),
+                order=0,
+                mode='reflect',
+                prefilter=False
+            )
+
+            acc += np.abs(neigh - gray_img)
+
+    return acc / N
 
 
 def extract_rich_features(img: np.ndarray, pred_dict: Dict[str, np.ndarray]) -> np.ndarray:
@@ -351,12 +321,11 @@ def model_inference(
     Returns:
         Optional[np.ndarray]: Binary sky mask (1 for sky), or None if error occurs
     """
-    # Check if models are available, wait for user to add them if not
-    wait_for_models(pathModel, model_name, use_lgbm)
-
     threshold_dict = {
-        'efficientnet-b5': 176 / 255,
-        'efficientnet-b7': 157 / 255
+        'efficientnet-b4': 155 / 255,
+        'efficientnet-b5': 158 / 255,
+        'efficientnet-b6': 148 / 255,
+        'efficientnet-b7': 161 / 255
     }
     threshold = threshold_dict.get(model_name, 0.5)
 

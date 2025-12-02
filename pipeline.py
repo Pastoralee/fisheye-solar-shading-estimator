@@ -6,7 +6,7 @@ from colorama import Fore, Style
 from calibrate_camera import calibrate_camera
 from compute_diffuse_shading_factor import compute_diffuse_shading_factor
 from compute_direct_shading_factor import compute_direct_shading_factor_generic
-from config import MODEL_CONFIGS, PATHS, DataSourceInfo, ModelConfig, ProcessingStage
+from config import PATHS, DataSourceInfo, ModelConfig, ProcessingStage
 from data_loader import (
     load_calibration_images,
     load_consumption_profile,
@@ -15,7 +15,7 @@ from data_loader import (
     load_system_specs,
 )
 from import_camera_intrinsic_function import import_camera_intrinsic_function
-from inference import batch_disk_mask_inference, inference
+from inference import batch_disk_mask_inference, inference, detect_available_models
 from retrieve_NASA_POWER_irradiance import retrieve_NASA_POWER_irradiance
 from stage_manager import StageManager
 from state_of_charge_estimation import (
@@ -90,23 +90,83 @@ class SolarEstimationPipeline:
     def get_model_config(self) -> ModelConfig:
         """Get model configuration from user input.
         
-        Presents available model options to the user and returns the selected
-        configuration for sky image processing.
+        Automatically detects available models in the system data directory
+        and presents options to the user based on what's available.
         
         Returns:
             ModelConfig: Selected model configuration containing model name,
                         LGBM usage flag, and resize target dimensions
+                        
+        Raises:
+            RuntimeError: If no models are found in the system data directory
         """
-        print(f"{Fore.CYAN}Select model configuration:{Style.RESET_ALL}")
-        print("1. 512x512 EfficientNet-b5 (fastest)")
-        print("2. 512x512 EfficientNet-b7")
-        print("3. Base EfficientNet-b5")
-        print("4. Base EfficientNet-b7")
-        print("5. Base EfficientNet-b5 + LGBM")
-        print("6. Base EfficientNet-b7 + LGBM (best quality)")
-
-        choice = get_user_choice("Enter choice (1-6): ", ["1", "2", "3", "4", "5", "6"])
-        return MODEL_CONFIGS[choice]
+        # Detect available models
+        available_models, available_lgbm = detect_available_models(PATHS["system_data"])
+        
+        while not available_models:
+            print(f"{Fore.RED}No EfficientNet models found in {PATHS['system_data']}!")
+            print(f"Please add at least one model file (efficientnet-b4.pt to efficientnet-b7.pt){Style.RESET_ALL}")
+            print(f"\n{Fore.CYAN}To obtain these models:{Style.RESET_ALL}")
+            print("1. Download from: https://drive.google.com/drive/folders/1PnKakX55PCW72MTsl-TXBb6TM5EOUejA")
+            print("2. Navigate to the 'Models' folder")
+            print("3. Download at least one .pt file")
+            print("4. Optionally download the corresponding meta_model_*.txt file for LightGBM refinement (recommended)")
+            print(f"5. Place in {PATHS['system_data']} directory")
+            input(f"\n{Fore.CYAN}Add the missing model files and press Enter to continue...{Style.RESET_ALL}")
+            available_models, available_lgbm = detect_available_models(PATHS["system_data"])
+        
+        print(f"\n{Fore.CYAN}=== Available Models ==={Style.RESET_ALL}")
+        print(f"{Fore.GREEN}Found {len(available_models)} model(s): {', '.join(sorted(available_models))}{Style.RESET_ALL}")
+        if available_lgbm:
+            print(f"{Fore.GREEN}LightGBM models available for: {', '.join(sorted(available_lgbm))}{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}No LightGBM models found (optional refinement){Style.RESET_ALL}")
+        
+        # Step 1: Select EfficientNet model
+        print(f"\n{Fore.CYAN}Step 1: Select EfficientNet model{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Lower models = faster runtime | Higher models = better accuracy{Style.RESET_ALL}")
+        
+        model_options = []
+        model_map = {}
+        for i, model in enumerate(sorted(available_models), 1):
+            model_options.append(str(i))
+            model_map[str(i)] = model
+            print(f"{i}. {model}")
+        
+        model_choice = get_user_choice("Select model: ", model_options)
+        selected_model = model_map[model_choice]
+        
+        # Step 2: Select processing mode
+        print(f"\n{Fore.CYAN}Step 2: Select processing mode{Style.RESET_ALL}")
+        options = ["1", "2"]
+        option_configs = {
+            "1": {"resize": (512, 512), "lgbm": False, "desc": "Fast (512x512)"},
+            "2": {"resize": (1024, 1024), "lgbm": False, "desc": "Default (1024x1024)"}
+        }
+        
+        print("1. Fast inference (512x512) - Faster runtime, lower accuracy")
+        print("2. Default inference (1024x1024) - Balanced performance")
+        
+        # Add LightGBM option if available for selected model
+        model_version = selected_model.split('-')[-1]  # e.g., 'b5', 'b7'
+        if model_version in available_lgbm:
+            options.append("3")
+            option_configs["3"] = {"resize": (1024, 1024), "lgbm": True, "desc": "Best (1024x1024 + LightGBM)"}
+            print(f"3. Best quality (1024x1024 + LightGBM) - {Fore.GREEN}Highest accuracy{Style.RESET_ALL}")
+            print(f"   {Fore.YELLOW}Warning: Not suitable for embedded devices due to increased processing time{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.YELLOW}(LightGBM option unavailable - missing meta_model_{model_version}.txt){Style.RESET_ALL}")
+        
+        mode_choice = get_user_choice("Select mode: ", options)
+        selected_config = option_configs[mode_choice]
+        
+        print(f"\n{Fore.GREEN}Selected: {selected_model} | {selected_config['desc']}{Style.RESET_ALL}")
+        
+        return ModelConfig(
+            model_name=selected_model,
+            use_lgbm=selected_config["lgbm"],
+            resize_target=selected_config["resize"]
+        )
 
     def run_calibration(self) -> None:
         """Run camera calibration using chessboard images.

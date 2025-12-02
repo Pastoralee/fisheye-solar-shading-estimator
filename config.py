@@ -54,16 +54,6 @@ SYSTEM_PARAMS = {
     ],
 }
 
-# Model configurations
-MODEL_CONFIGS = {
-    "1": ModelConfig("efficientnet-b5", False, (512, 512)),
-    "2": ModelConfig("efficientnet-b7", False, (512, 512)),
-    "3": ModelConfig("efficientnet-b5", False, (1024, 1024)),
-    "4": ModelConfig("efficientnet-b7", False, (1024, 1024)),
-    "5": ModelConfig("efficientnet-b5", True, (1024, 1024)),
-    "6": ModelConfig("efficientnet-b7", True, (1024, 1024)),
-}
-
 # File paths
 PATHS = {
     "system_data": "./SystemData",
