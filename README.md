@@ -47,12 +47,17 @@ pip install -r requirements.txt
 **Critical Step**: Download the pre-trained models for sky segmentation:
 
 1. **Access Google Drive**: https://drive.google.com/drive/folders/1PnKakX55PCW72MTsl-TXBb6TM5EOUejA
-2. **Download from Models folder**: Download all model files (.pt and .txt files)
+2. **Download from Models folder**: Download at least one EfficientNet model (.pt file) and optionally its corresponding LightGBM meta file (.txt)
 3. **Place in SystemData/**: Move all downloaded model files to the `SystemData/` directory
 
 **Available Models:**
-- `efficientnet-b5.pt` / `efficientnet-b7.pt` (Main segmentation models)
-- `meta_model_b5.txt` / `meta_model_b7.txt` (LightGBM refinement models)
+- `efficientnet-b4.pt` to `efficientnet-b7.pt` (Main segmentation models)
+- `meta_model_b4.txt` to `meta_model_b7.txt` (LightGBM refinement models)
+
+**Tips:**
+- **EfficientNet variants (b4→b7):** Higher numbers mean larger networks with more parameters. b7 is the most accurate but slowest; b4 is the lightest and fastest.
+- **LightGBM refinement:** Adds a gradient-boosting step after the neural network to correct prediction errors, improving accuracy at the cost of extra processing time.
+- If you can, use the most precise model (EfficientNet-b7 with LGBM). If you experience performance issues, try a lighter model (b4/b5) or disable LightGBM.
 
 ### Step 4: Prepare Input Data
 
