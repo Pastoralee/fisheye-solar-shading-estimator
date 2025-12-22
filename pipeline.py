@@ -107,10 +107,10 @@ class SolarEstimationPipeline:
             print(f"{Fore.RED}No EfficientNet models found in {PATHS['system_data']}!")
             print(f"Please add at least one model file (efficientnet-b4.pt to efficientnet-b7.pt){Style.RESET_ALL}")
             print(f"\n{Fore.CYAN}To obtain these models:{Style.RESET_ALL}")
-            print("1. Download from: https://drive.google.com/drive/folders/1PnKakX55PCW72MTsl-TXBb6TM5EOUejA")
+            print("1. Download from: https://doi.org/10.57745/FG5T2Z")
             print("2. Navigate to the 'Models' folder")
-            print("3. Download at least one .pt file")
-            print("4. Optionally download the corresponding meta_model_*.txt file for LightGBM refinement (recommended)")
+            print("3. Chose at least one .pt file")
+            print("4. Optionally chose the corresponding meta_model_*.txt file for LightGBM refinement (recommended)")
             print(f"5. Place in {PATHS['system_data']} directory")
             input(f"\n{Fore.CYAN}Add the missing model files and press Enter to continue...{Style.RESET_ALL}")
             available_models, available_lgbm = detect_available_models(PATHS["system_data"])
@@ -207,8 +207,8 @@ class SolarEstimationPipeline:
                 - np.ndarray: Solar zenith angles in degrees
         """
         # Parse time range
-        start_str = str(self.user_data["Start year"][0])
-        end_str = str(self.user_data["End year"][0])
+        start_str = str(self.user_data["Start date (YYYYMMDD)"][0])
+        end_str = str(self.user_data["End date (YYYYMMDD)"][0])
         start_dt = pd.to_datetime(start_str, format="%Y%m%d")
         end_dt = pd.to_datetime(end_str, format="%Y%m%d")
         time_array = pd.date_range(start=start_dt, end=end_dt + pd.Timedelta(hours=23), freq="1h")
@@ -257,8 +257,8 @@ class SolarEstimationPipeline:
                 normal_direct, hor_diffuse, _ = retrieve_NASA_POWER_irradiance(
                     lat=float(self.user_data["Lattitude (°)"][0]),
                     long=float(self.user_data["Longitude (°)"][0]),
-                    start_time=int(self.user_data["Start year"][0]),
-                    end_time=int(self.user_data["End year"][0]),
+                    start_time=int(self.user_data["Start date (YYYYMMDD)"][0]),
+                    end_time=int(self.user_data["End date (YYYYMMDD)"][0]),
                 )
                 return normal_direct, hor_diffuse, solar_azimuth, solar_zenith, time_array
             except Exception as e:
@@ -312,9 +312,10 @@ class SolarEstimationPipeline:
         if self.flag_combination:
             skyimage_bw_mask = batch_disk_mask_inference(
                 self.all_images,
-                model_config.model_name,
-                model_config.use_lgbm,
-                model_config.resize_target,
+                model_path=None,  # Uses default system_data path
+                model_name=model_config.model_name,
+                use_lgbm=model_config.use_lgbm,
+                resize_target=model_config.resize_target,
             )
         else:
             skyimage_bw_mask = inference(

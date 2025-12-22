@@ -219,7 +219,7 @@ def compute_sun_disk_radius_pixels(
     disk_az_ze = []
     for v in disk_vectors:
         v = v / np.linalg.norm(v)
-        ze = np.degrees(np.arccos(v[2]))
+        ze = np.degrees(np.arccos(np.clip(v[2], -1, 1)))
         az = np.degrees(np.arctan2(v[0], v[1])) % 360
         disk_az_ze.append([az, ze])
 

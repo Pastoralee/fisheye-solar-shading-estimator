@@ -40,7 +40,7 @@ SYSTEM_PARAMS = {
         "Plane inclination (°)",
     ],
     "CALIB_PARAMS": ["Calib vertex short", "Calib vertex long", "Calib square size (mm)"],
-    "TIME_PARAMS": ["Start year", "End year"],
+    "TIME_PARAMS": ["Start date (YYYYMMDD)", "End date (YYYYMMDD)"],
     "SYSTEM_PARAMS": [
         "Solar panel peak wattage (W)",
         "Converter efficiency (%)",
@@ -98,8 +98,8 @@ PARAM_VALIDATION_RULES = {
     "Calib square size (mm)": {"min_val": 0.1},
     
     # Time parameters - just check they're valid dates
-    "Start year": {"min_val": 19700101},
-    "End year": {"min_val": 19700101},
+    "Start date (YYYYMMDD)": {"min_val": 19700101},
+    "End date (YYYYMMDD)": {"min_val": 19700101},
     
     # System parameters
     "Solar panel peak wattage (W)": {"min_val": 0},

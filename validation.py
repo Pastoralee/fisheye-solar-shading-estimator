@@ -96,8 +96,8 @@ def validate_system_specs(specs_df: pd.DataFrame) -> bool:
     
     # Cross-parameter validation: start date must be before end date
     if all_valid:
-        start_date = int(float(specs_df["Start year"][0]))
-        end_date = int(float(specs_df["End year"][0]))
+        start_date = int(float(specs_df["Start date (YYYYMMDD)"][0]))
+        end_date = int(float(specs_df["End date (YYYYMMDD)"][0]))
         if start_date > end_date:
             print(f"{Fore.RED}Start date ({start_date}) must be before end date ({end_date}){Style.RESET_ALL}")
             all_valid = False
@@ -177,50 +177,42 @@ def prompt_for_file(message: str) -> None:
     input(f"{Fore.CYAN}{message} Press Enter when ready...{Style.RESET_ALL}")
 
 
-def validate_image_dimensions(sky_images: List[str], calib_images: List[str]) -> bool:
+def validate_image_dimensions(image_paths: List[str]) -> None:
     """Validate that all images have consistent dimensions.
     
-    Ensures all sky and calibration images have the same width and height,
-    which is required for proper camera calibration and processing.
+    Checks all images against the first image's dimensions. Raises an error if
+    any image has different dimensions (width or height).
     
     Args:
-        sky_images (List[str]): List of sky image file paths
-        calib_images (List[str]): List of calibration image file paths
+        image_paths (List[str]): List of image file paths to validate
         
-    Returns:
-        bool: True if all images have matching dimensions, False otherwise
-        
-    Note:
-        Returns True if no images are provided (empty lists).
+    Raises:
+        ValueError: If an image cannot be read or has different dimensions
     """
-    all_images = sky_images + calib_images
-    if not all_images:
-        return True
-
+    if len(image_paths) <= 1:
+        return
+    
     # Get reference dimensions from first image
-    first_img = cv2.imread(all_images[0], cv2.IMREAD_GRAYSCALE)
+    first_img = cv2.imread(image_paths[0])
     if first_img is None:
-        print(f"{Fore.RED}Cannot read image: {os.path.basename(all_images[0])}{Style.RESET_ALL}")
-        return False
-
+        raise ValueError(f"Cannot read image: {os.path.basename(image_paths[0])}")
+    
     ref_height, ref_width = first_img.shape[:2]
 
     # Check all other images match reference dimensions
-    for img_path in all_images[1:]:
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    for img_path in image_paths[1:]:
+        img = cv2.imread(img_path)
         if img is None:
-            print(f"{Fore.RED}Cannot read image: {os.path.basename(img_path)}{Style.RESET_ALL}")
-            return False
-        if img.shape[:2] != (ref_height, ref_width):
-            print(
-                f"{Fore.RED}Size mismatch: {os.path.basename(img_path)} ({img.shape[1]}x{img.shape[0]}) vs reference ({ref_width}x{ref_height}){Style.RESET_ALL}"
+            raise ValueError(f"Cannot read image: {os.path.basename(img_path)}")
+        
+        height, width = img.shape[:2]
+        
+        # Check if dimensions match exactly
+        if (height, width) != (ref_height, ref_width):
+            raise ValueError(
+                f"Size mismatch: {os.path.basename(img_path)} ({width}x{height}) "
+                f"vs reference ({ref_width}x{ref_height})"
             )
-            return False
-
-    print(
-        f"{Fore.GREEN}All {len(all_images)} images have consistent dimensions: {ref_width}x{ref_height}{Style.RESET_ALL}"
-    )
-    return True
 
 
 def ask_restart() -> bool:

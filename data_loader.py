@@ -135,10 +135,10 @@ def load_sky_images() -> Tuple[np.ndarray, bool, List[str]]:
     # Handle multiple images
     if len(images) > 1:
         print(f"{Fore.CYAN}Found {len(images)} images. Choose processing method:{Style.RESET_ALL}")
-        print("0. Use single image")
-        print("1. Combine all images (batch processing)")
-        choice = get_user_choice("Enter choice (0/1): ", ["0", "1"])
-        flag_combination = choice == "1"
+        print("1. Use single image")
+        print("2. Combine all images (batch processing)")
+        choice = get_user_choice("Enter choice (1/2): ", ["1", "2"])
+        flag_combination = choice == "2"
     else:
         flag_combination = False
 
@@ -169,9 +169,10 @@ def load_sky_images() -> Tuple[np.ndarray, bool, List[str]]:
 def load_calibration_images(sky_images: List[str] = None) -> List[str]:
     """Load calibration images for camera calibration process.
     
-    Validates that at least 8 JPEG calibration images are present in the
+    Validates that at least 8 calibration images are present in the
     CalibrationImages folder and ensures their dimensions match sky images
-    if provided. Prompts user to fix dimension mismatches.
+    if provided. Automatically rotates images with swapped dimensions (portrait/landscape)
+    to match the reference orientation.
     
     Args:
         sky_images: Optional list of sky image paths to validate dimensions against
@@ -189,9 +190,13 @@ def load_calibration_images(sky_images: List[str] = None) -> List[str]:
         return load_calibration_images(sky_images)
 
     # Validate image dimensions if sky images are provided
-    if sky_images and not validate_image_dimensions(sky_images, images):
-        prompt_for_file("Fix calibration image dimensions to match sky images.")
-        return load_calibration_images(sky_images)
+    if sky_images:
+        try:
+            validate_image_dimensions(sky_images + images)
+        except ValueError as e:
+            print(f"{Fore.RED}{str(e)}{Style.RESET_ALL}")
+            prompt_for_file("Fix calibration image dimensions to match sky images.")
+            return load_calibration_images(sky_images)
 
     print(f"{Fore.GREEN}Found {len(images)} calibration images{Style.RESET_ALL}")
     return images

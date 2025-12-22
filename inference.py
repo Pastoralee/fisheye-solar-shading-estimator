@@ -11,6 +11,7 @@ from colorama import Fore, Style
 from config import PATHS
 from camera_coords_to_image_intrinsic import camera_coords_to_image_intrinsic
 from import_camera_intrinsic_function import import_camera_intrinsic_function
+from validation import validate_image_dimensions, prompt_for_file
 
 
 def detect_available_models(pathModel: str) -> Tuple[List[str], List[str]]:
@@ -440,7 +441,7 @@ def inference(
 
 
 def batch_disk_mask_inference(
-    folder_path: str = None,
+    image_paths: List[str] = None,
     model_path: str = None,
     model_name: str = 'efficientnet-b5',
     use_lgbm: bool = False,
@@ -449,12 +450,12 @@ def batch_disk_mask_inference(
     """
     Process multiple fisheye images and create a combined mask.
 
-    This function processes all images in a specified folder using the sky segmentation model
+    This function processes all images in a specified list using the sky segmentation model
     and combines their masks using an AND operation. The combined mask represents areas
     that are consistently classified as sky across all images.
 
     Args:
-        folder_path (str): Path to folder containing input images (defaults to sky_images path).
+        image_paths (List[str]): List of image file paths to process (defaults to all images in sky_images folder).
         model_path (str): Path to folder containing model checkpoints (defaults to system_data path).
         model_name (str): Name of the model architecture to use.
         use_lgbm (bool): Whether to use LightGBM for post-processing.
@@ -464,19 +465,20 @@ def batch_disk_mask_inference(
         np.ndarray: Combined binary mask.
     """
     # Use default paths from config if not provided
-    if folder_path is None:
+    if image_paths is None:
+        import glob
         folder_path = PATHS["sky_images"]
+        image_paths = glob.glob(os.path.join(folder_path, "*.jpg")) + \
+            glob.glob(os.path.join(folder_path, "*.png"))
     if model_path is None:
         model_path = PATHS["system_data"]
-    import glob
+    
     data_dir = PATHS["debug_data"]
     os.makedirs(data_dir, exist_ok=True)
     pprad_path = os.path.join(data_dir, "pprad.yml")
     estimate_radius(pprad_path)
-
-    image_paths = glob.glob(os.path.join(folder_path, "*.jpg")) + \
-        glob.glob(os.path.join(folder_path, "*.png"))
     combined_mask = None
+    combined_prediction = None
 
     for _, img_path in enumerate(image_paths):
         img = cv2.imread(img_path)
@@ -489,17 +491,23 @@ def batch_disk_mask_inference(
             use_lgbm=use_lgbm,
             resize_target=resize_target)
         
+        # Track combined prediction at original resolution (1024x1024)
+        if combined_prediction is None:
+            combined_prediction = prediction.copy()
+        else:
+            combined_prediction = combined_prediction * prediction
+        
         size = cropped_section[3] + 1 - cropped_section[2]
-        prediction = cv2.resize(prediction, (size, size), interpolation=cv2.INTER_NEAREST)
+        prediction_resized = cv2.resize(prediction, (size, size), interpolation=cv2.INTER_NEAREST)
 
         full_size_mask = np.zeros(img.shape[:2], dtype=np.uint8)
         full_size_mask[cropped_section[2]:cropped_section[3] + 1,
-                       cropped_section[0]:cropped_section[1] + 1] = prediction
+                       cropped_section[0]:cropped_section[1] + 1] = prediction_resized
 
         if combined_mask is None:
             combined_mask = full_size_mask.copy()
         else:
             combined_mask = combined_mask * full_size_mask  # set to 0 if any mask is 0
 
-    cv2.imwrite(os.path.join(data_dir, "combined_mask.jpg"), combined_mask * 255)
+    cv2.imwrite(os.path.join(data_dir, "combined_mask.jpg"), combined_prediction * 255)
     return combined_mask
